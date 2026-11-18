@@ -1,1 +1,21 @@
-
+name: Update data
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 4 * * 1'   # every Monday, 04:17 UTC
+permissions:
+  contents: write
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - run: node scripts/fetch-snapshot.mjs
+      - name: Commit if changed
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/snapshot.json
+          git diff --cached --quiet || (git commit -m "Update OSM snapshot" && git push)
