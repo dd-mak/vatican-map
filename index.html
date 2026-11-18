@@ -1,0 +1,2787 @@
+<!DOCTYPE html>
+<html lang="la">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Civitas Vaticana — Tabula Cartographica</title>
+  <meta name="description" content="Interactive map of Vatican City built on live OpenStreetMap data: classified points of interest, roads, railways and green areas. Latin / English.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%231a2a4a'/%3E%3Cpath d='M7 24v-4h18v4zM9 20c0-6 3-10 7-10s7 4 7 10z' fill='%23c9a959'/%3E%3Cpath d='M16 4v6M13.5 6.5h5' stroke='%23c9a959' stroke-width='1.6'/%3E%3C/svg%3E">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Civitas Vaticana — an interactive map of Vatican City">
+  <meta property="og:description" content="The world's smallest state, mapped with open data. Made for International GIS Day.">
+  <meta property="og:url" content="https://YOUR-USERNAME.github.io/vatican-map/">
+  <meta property="og:image" content="https://YOUR-USERNAME.github.io/vatican-map/og-image.png">
+  <meta name="twitter:card" content="summary_large_image">
+
+  <!-- Typography: Cinzel (Trajan revival) + Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+
+  <!-- MapLibre GL JS (keyless, open-source) -->
+  <link href="https://unpkg.com/maplibre-gl@3.3.1/dist/maplibre-gl.css" rel="stylesheet">
+  <script src="https://unpkg.com/maplibre-gl@3.3.1/dist/maplibre-gl.js"></script>
+
+  <!-- Chart.js for mini-dashboards -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+  <style>
+    /* ============================================================
+       ANTI-SLOP DESIGN SYSTEM
+       Sharp corners everywhere. Muted editorial palette.
+       Thin 1px borders in antique gold #c9a959 or ink.
+       ============================================================ */
+
+    :root {
+      --papal-blue: #1a2a4a;
+      --terracotta: #c86a5a;
+      --paper: #f7f4ef;
+      --gold: #c9a959;
+      --ink: #1c1c1c;
+      --ink-light: #3a3a3a;
+      --muted: #8a8578;
+      --white: #ffffff;
+      --green-accent: #7a9a6a;
+      --font-heading: 'Cinzel', serif;
+      --font-body: 'Inter', 'Source Sans 3', sans-serif;
+      --border-thin: 1px solid var(--gold);
+      --border-ink: 1px solid var(--ink);
+      --radius: 0;
+      --track: #e8e3d8;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html, body {
+      height: 100%;
+      overflow: hidden;
+      font-family: var(--font-body);
+      background: var(--paper);
+      color: var(--ink);
+    }
+
+    /* ---------- LAYOUT: Asymmetrical editorial grid ---------- */
+    #app {
+      display: grid;
+      grid-template-columns: 1fr 360px;
+      grid-template-rows: auto 1fr auto;
+      grid-template-areas:
+        "header  header"
+        "map     sidebar"
+        "footer  footer";
+      height: 100vh;
+      width: 100vw;
+    }
+
+    /* ---------- HEADER ---------- */
+    header {
+      grid-area: header;
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      padding: 0.65rem 1.5rem;
+      background: var(--paper);
+      border-bottom: var(--border-thin);
+      z-index: 10;
+      flex-wrap: wrap;
+      gap: 0.25rem;
+    }
+
+    header h1 {
+      font-family: var(--font-heading);
+      font-weight: 700;
+      font-size: 1.35rem;
+      letter-spacing: 0.06em;
+      color: var(--papal-blue);
+      text-transform: uppercase;
+    }
+
+    header .subtitle {
+      font-family: var(--font-body);
+      font-size: 0.7rem;
+      font-weight: 400;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    header .header-controls {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+    }
+
+    /* ---------- MAP ---------- */
+    #map-container {
+      grid-area: map;
+      position: relative;
+      border-right: var(--border-thin);
+      border-bottom: var(--border-thin);
+      outline: 1px solid var(--gold);
+      outline-offset: -4px;
+    }
+
+    #map { width: 100%; height: 100%; }
+
+    /* ============================================================
+       SIDEBAR — REFINED EDITORIAL METRICS
+       ============================================================ */
+    #sidebar {
+      grid-area: sidebar;
+      background: var(--paper);
+      border-bottom: var(--border-thin);
+      overflow-y: auto;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      scrollbar-width: thin;
+      scrollbar-color: var(--gold) var(--paper);
+    }
+
+    #sidebar::-webkit-scrollbar { width: 5px; }
+    #sidebar::-webkit-scrollbar-track { background: var(--paper); }
+    #sidebar::-webkit-scrollbar-thumb { background: var(--gold); }
+
+    /* ----- Identity block (flag + state name) ----- */
+    .sidebar-identity {
+      display: flex;
+      gap: 0.75rem;
+      align-items: center;
+      padding: 0.9rem 1rem 0.8rem;
+      border-bottom: 1px solid var(--gold);
+      background: linear-gradient(135deg, rgba(201,169,89,0.08), transparent 70%);
+      position: relative;
+    }
+
+    .vatican-flag {
+      width: 48px;
+      height: 48px;
+      flex-shrink: 0;
+      display: flex;
+      border: 1px solid var(--ink);
+      box-shadow: 2px 2px 0 rgba(0,0,0,0.1);
+      border-radius: 0;
+    }
+
+    .flag-yellow { background: #ffe100; flex: 1; }
+    .flag-white {
+      background: #fff;
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .flag-emblem { width: 22px; height: 22px; display: block; }
+
+    .identity-text { min-width: 0; flex: 1; }
+
+    .identity-name {
+      font-family: var(--font-heading);
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      color: var(--papal-blue);
+      text-transform: uppercase;
+      line-height: 1.25;
+    }
+
+    .identity-sub {
+      font-size: 0.62rem;
+      color: var(--muted);
+      margin-top: 0.2rem;
+      line-height: 1.4;
+    }
+
+    /* ----- Sections ----- */
+    .metric-section {
+      padding: 0.85rem 1rem;
+      border-bottom: 1px solid #e2ddd2;
+    }
+
+    .section-title {
+      font-family: var(--font-heading);
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--papal-blue);
+      margin-bottom: 0.65rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .section-title::before {
+      content: '';
+      width: 6px;
+      height: 6px;
+      background: var(--gold);
+      transform: rotate(45deg);
+      flex-shrink: 0;
+    }
+
+    .section-title::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: linear-gradient(to right, var(--gold), transparent);
+    }
+
+    /* ----- Bar metric block ----- */
+    .metric-block { margin-bottom: 0.55rem; }
+    .metric-block:last-child { margin-bottom: 0; }
+
+    .metric-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 0.22rem;
+    }
+
+    .metric-name {
+      font-size: 0.7rem;
+      color: var(--ink-light);
+    }
+
+    .metric-value-lg {
+      font-family: var(--font-body);
+      font-size: 0.8rem;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      color: var(--ink);
+    }
+
+    .metric-bar {
+      width: 100%;
+      height: 3px;
+      background: #e8e3d8;
+      border-radius: 0;
+      overflow: hidden;
+    }
+
+    .metric-bar-fill {
+      height: 100%;
+      background: var(--terracotta);
+      width: 0%;
+      transition: width 0.5s ease;
+    }
+
+    /* ----- Duo (count / area) ----- */
+    .metric-duo {
+      display: flex;
+      border: 1px solid #d4cfc4;
+      border-radius: 0;
+      margin-bottom: 0.55rem;
+      background: rgba(255,255,255,0.5);
+    }
+
+    .duo-item {
+      flex: 1;
+      padding: 0.5rem 0.55rem;
+      text-align: center;
+    }
+
+    .duo-item:first-child { border-right: 1px solid #d4cfc4; }
+
+    .duo-value {
+      font-family: var(--font-heading);
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: var(--papal-blue);
+      font-variant-numeric: tabular-nums;
+      line-height: 1.1;
+    }
+
+    .duo-label {
+      font-size: 0.55rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      margin-top: 0.25rem;
+    }
+
+    /* ----- Simple rows ----- */
+    .metric-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      padding: 0.26rem 0;
+      border-bottom: 1px dotted #d8d3c8;
+      font-size: 0.71rem;
+    }
+    .metric-row:last-child { border-bottom: none; }
+
+    .metric-label { color: var(--ink-light); }
+
+    .metric-value {
+      font-weight: 600;
+      color: var(--ink);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .metric-value small {
+      font-weight: 300;
+      color: var(--muted);
+      font-size: 0.6rem;
+      margin-left: 1px;
+    }
+
+    /* ----- Highlighted "interesting" row ----- */
+    .interesting-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 0.5rem;
+      padding: 0.38rem 0.5rem;
+      background: rgba(201,169,89,0.1);
+      border-left: 3px solid var(--gold);
+      font-size: 0.66rem;
+      margin-top: 0.4rem;
+    }
+
+    .interesting-label {
+      color: var(--ink-light);
+      font-style: italic;
+      white-space: nowrap;
+    }
+
+    .interesting-value {
+      font-weight: 600;
+      color: var(--papal-blue);
+      text-align: right;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 62%;
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* ----- Data-quality gauge ----- */
+    .gauge-container { margin-top: 0.6rem; }
+
+    .gauge-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.62rem;
+      color: var(--ink-light);
+      margin-bottom: 0.25rem;
+    }
+
+    .gauge-label span:last-child {
+      font-weight: 700;
+      color: var(--papal-blue);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .gauge-bar {
+      width: 100%;
+      height: 4px;
+      background: #e8e3d8;
+      border-radius: 0;
+      overflow: hidden;
+    }
+
+    .gauge-fill {
+      height: 100%;
+      background: var(--terracotta);
+      width: 0%;
+      transition: width 0.5s ease;
+    }
+
+    /* ----- Green ring gauge ----- */
+    .green-gauge {
+      display: flex;
+      align-items: center;
+      gap: 0.8rem;
+    }
+
+    .green-ring {
+      width: 58px;
+      height: 58px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--font-heading);
+      font-weight: 700;
+      font-size: 0.75rem;
+      color: var(--papal-blue);
+      position: relative;
+      background: conic-gradient(var(--green-accent) 0deg, var(--track) 0deg);
+      flex-shrink: 0;
+      border: 1px solid var(--ink);
+    }
+
+    .green-ring::after {
+      content: '';
+      position: absolute;
+      inset: 5px;
+      background: var(--paper);
+      border-radius: 50%;
+      z-index: 0;
+    }
+
+    .green-ring span { position: relative; z-index: 1; }
+
+    .green-legend {
+      font-size: 0.62rem;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+
+    .green-legend strong {
+      display: block;
+      color: var(--ink-light);
+      font-weight: 600;
+      font-size: 0.68rem;
+      margin-bottom: 0.1rem;
+    }
+
+    /* ----- POI section ----- */
+    .poi-count-large {
+      display: flex;
+      align-items: baseline;
+      gap: 0.45rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .poi-count-large #metric-poi-count {
+      font-family: var(--font-heading);
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--papal-blue);
+      line-height: 1;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .poi-count-label {
+      font-size: 0.58rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--muted);
+    }
+
+    .chart-container {
+      position: relative;
+      width: 100%;
+      height: 128px;
+    }
+
+    /* ----- Curiosum box ----- */
+    .curiosum {
+      padding: 0.85rem 1rem 1rem;
+      background: linear-gradient(135deg, rgba(26,42,74,0.04), transparent);
+      border-bottom: 1px solid var(--gold);
+    }
+
+    .curiosum-header {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-family: var(--font-heading);
+      font-size: 0.66rem;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--gold);
+      margin-bottom: 0.4rem;
+    }
+
+    .curiosum-icon { font-size: 0.8rem; line-height: 1; }
+
+    .curiosum-text {
+      font-size: 0.7rem;
+      line-height: 1.55;
+      color: var(--ink-light);
+      font-style: italic;
+      min-height: 4.6em;
+      transition: opacity 0.3s ease;
+    }
+
+    /* ============================================================
+       LEGEND (bottom-left, sharp, stacked)
+       ============================================================ */
+    #legend {
+      position: absolute;
+      bottom: 1.2rem;
+      left: 1.2rem;
+      background: var(--paper);
+      border: var(--border-thin);
+      border-radius: 0;
+      padding: 0.5rem 0.7rem;
+      z-index: 20;
+      min-width: 210px;
+      box-shadow: 3px 3px 0 rgba(0,0,0,0.06);
+      font-size: 0.72rem;
+      transition: transform 0.2s ease;
+    }
+
+    #legend.collapsed {
+      transform: translateY(calc(100% - 28px));
+      overflow: hidden;
+    }
+
+    #legend .legend-header {
+      font-family: var(--font-heading);
+      font-weight: 600;
+      font-size: 0.75rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--papal-blue);
+      border-bottom: var(--border-thin);
+      padding-bottom: 0.25rem;
+      margin-bottom: 0.3rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    #legend .legend-header .toggle-icon {
+      font-size: 0.65rem;
+      color: var(--muted);
+      transition: transform 0.2s;
+    }
+
+    #legend.collapsed .legend-header .toggle-icon {
+      transform: rotate(180deg);
+    }
+
+    .legend-row {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.2rem 0;
+      border-bottom: 1px dotted #d4cfc4;
+      cursor: default;
+    }
+
+    .legend-row:last-child { border-bottom: none; }
+
+    .legend-swatch {
+      width: 14px;
+      height: 14px;
+      flex-shrink: 0;
+      border: 1px solid rgba(0,0,0,0.2);
+      border-radius: 0;
+    }
+
+    .legend-label {
+      flex: 1;
+      font-weight: 400;
+      color: var(--ink-light);
+      white-space: nowrap;
+    }
+
+    .legend-count {
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      font-size: 0.68rem;
+      color: var(--ink);
+      min-width: 2.2em;
+      text-align: right;
+    }
+
+    .toggle-switch {
+      position: relative;
+      width: 22px;
+      height: 22px;
+      flex-shrink: 0;
+      cursor: pointer;
+    }
+
+    .toggle-switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+      position: absolute;
+    }
+
+    .toggle-switch .toggle-track {
+      position: absolute;
+      inset: 0;
+      background: #d4cfc4;
+      border: 1px solid var(--ink);
+      border-radius: 0;
+      transition: background 0.2s;
+    }
+
+    .toggle-switch .toggle-track::after {
+      content: '';
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 16px;
+      height: 16px;
+      background: var(--white);
+      border: 1px solid var(--ink);
+      border-radius: 0;
+      transition: transform 0.2s;
+    }
+
+    .toggle-switch input:checked + .toggle-track {
+      background: var(--papal-blue);
+    }
+
+    .toggle-switch input:checked + .toggle-track::after {
+      transform: translateX(2px);
+    }
+
+    .toggle-switch input:focus-visible + .toggle-track {
+      outline: 2px solid var(--terracotta);
+      outline-offset: 2px;
+    }
+
+    .legend-row:hover .legend-label {
+      color: var(--papal-blue);
+      font-weight: 500;
+    }
+
+    /* ---------- PROGRESS BAR ---------- */
+    #progress-container {
+      position: absolute;
+      top: 0.8rem;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 280px;
+      background: var(--paper);
+      border: var(--border-thin);
+      border-radius: 0;
+      padding: 0.3rem 0.5rem;
+      z-index: 30;
+      display: none;
+      box-shadow: 2px 2px 0 rgba(0,0,0,0.06);
+    }
+
+    #progress-container.visible { display: block; }
+
+    #progress-text {
+      font-size: 0.65rem;
+      color: var(--ink-light);
+      margin-bottom: 0.2rem;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    #progress-bar-outer {
+      width: 100%;
+      height: 5px;
+      background: #e0dbd0;
+      border: 1px solid #c0b8a8;
+      border-radius: 0;
+      overflow: hidden;
+    }
+
+    #progress-bar-inner {
+      height: 100%;
+      background: var(--terracotta);
+      width: 0%;
+      transition: width 0.15s linear;
+    }
+
+    /* ---------- ERROR BANNER ---------- */
+    #error-banner {
+      position: absolute;
+      top: 3.5rem;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--terracotta);
+      color: var(--white);
+      border: var(--border-ink);
+      border-radius: 0;
+      padding: 0.5rem 1rem;
+      font-size: 0.75rem;
+      z-index: 40;
+      display: none;
+      max-width: 90%;
+      text-align: center;
+    }
+
+    #error-banner.visible { display: block; }
+
+    #error-banner .retry-btn {
+      display: inline-block;
+      margin-left: 0.6rem;
+      padding: 0.2rem 0.6rem;
+      background: var(--white);
+      color: var(--terracotta);
+      border: 1px solid var(--ink);
+      border-radius: 0;
+      font-weight: 600;
+      font-size: 0.7rem;
+      cursor: pointer;
+      font-family: var(--font-body);
+    }
+
+    #error-banner .retry-btn:hover { background: var(--paper); }
+
+    /* ---------- NARRATIVE PANEL ---------- */
+    #narrative-panel {
+      position: absolute;
+      bottom: 1.2rem;
+      right: 1.2rem;
+      width: 280px;
+      background: var(--papal-blue);
+      color: var(--paper);
+      border: 2px solid var(--gold);
+      border-radius: 0;
+      padding: 0.8rem 1rem;
+      z-index: 25;
+      display: none;
+      box-shadow: 4px 4px 0 rgba(0,0,0,0.15);
+    }
+
+    #narrative-panel.visible { display: block; }
+
+    #narrative-panel h3 {
+      font-family: var(--font-heading);
+      font-size: 0.85rem;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--gold);
+      border-bottom: 1px solid var(--gold);
+      padding-bottom: 0.25rem;
+      margin-bottom: 0.4rem;
+    }
+
+    #narrative-panel p {
+      font-size: 0.75rem;
+      line-height: 1.5;
+      font-weight: 300;
+      margin-bottom: 0.5rem;
+    }
+
+    #narrative-panel .nav-buttons { display: flex; gap: 0.4rem; }
+
+    #narrative-panel .nav-buttons button {
+      flex: 1;
+      padding: 0.3rem;
+      background: transparent;
+      color: var(--paper);
+      border: 1px solid var(--gold);
+      border-radius: 0;
+      font-family: var(--font-body);
+      font-size: 0.68rem;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    #narrative-panel .nav-buttons button:hover {
+      background: var(--gold);
+      color: var(--papal-blue);
+    }
+
+    #narrative-panel .close-narrative {
+      position: absolute;
+      top: 0.3rem;
+      right: 0.5rem;
+      background: none;
+      border: none;
+      color: var(--gold);
+      font-size: 1rem;
+      cursor: pointer;
+      line-height: 1;
+    }
+
+    /* ---------- FOOTER ---------- */
+    footer {
+      grid-area: footer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.35rem 1.5rem;
+      background: var(--paper);
+      border-top: var(--border-thin);
+      font-size: 0.6rem;
+      color: var(--muted);
+      letter-spacing: 0.04em;
+      flex-wrap: wrap;
+      gap: 0.25rem;
+      z-index: 10;
+    }
+
+    footer a {
+      color: var(--papal-blue);
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+
+    footer .attribution-block {
+      display: flex;
+      gap: 0.8rem;
+      align-items: center;
+    }
+
+    /* ---------- BUTTONS ---------- */
+    .btn-sharp {
+      padding: 0.3rem 0.7rem;
+      background: var(--paper);
+      color: var(--ink);
+      border: 1px solid var(--ink);
+      border-radius: 0;
+      font-family: var(--font-body);
+      font-size: 0.7rem;
+      font-weight: 500;
+      letter-spacing: 0.04em;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+      white-space: nowrap;
+    }
+
+    .btn-sharp:hover {
+      background: var(--papal-blue);
+      color: var(--paper);
+      border-color: var(--papal-blue);
+    }
+
+    .btn-sharp.active {
+      background: var(--papal-blue);
+      color: var(--paper);
+      border-color: var(--papal-blue);
+    }
+
+    .btn-sharp:focus-visible {
+      outline: 2px solid var(--terracotta);
+      outline-offset: 2px;
+    }
+
+    /* ---------- POPUP ---------- */
+    .maplibregl-popup-content {
+      border-radius: 0 !important;
+      border: 1px solid var(--gold) !important;
+      background: var(--paper) !important;
+      padding: 0.7rem 0.9rem !important;
+      box-shadow: 3px 3px 0 rgba(0,0,0,0.1) !important;
+      font-family: var(--font-body) !important;
+      max-width: 240px !important;
+    }
+
+    .maplibregl-popup-tip {
+      border-top-color: var(--gold) !important;
+      border-bottom-color: var(--gold) !important;
+    }
+
+    .popup-title {
+      font-family: var(--font-heading);
+      font-weight: 600;
+      font-size: 0.8rem;
+      color: var(--papal-blue);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      border-bottom: 1px solid var(--gold);
+      padding-bottom: 0.2rem;
+      margin-bottom: 0.35rem;
+    }
+
+    .popup-stat {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.7rem;
+      padding: 0.1rem 0;
+      border-bottom: 1px dotted #d4cfc4;
+    }
+
+    .popup-stat:last-child { border-bottom: none; }
+
+    .popup-chart-container {
+      position: relative;
+      width: 100%;
+      height: 90px;
+      margin: 0.3rem 0;
+    }
+
+    /* ---------- HIGH-CONTRAST MODE ---------- */
+    body.high-contrast {
+      --track: #21262d;
+      --paper: #0d1117;
+      --ink: #e6edf3;
+      --ink-light: #c9d1d9;
+      --muted: #8b949e;
+      --papal-blue: #58a6ff;
+      --terracotta: #f78166;
+      --gold: #d29922;
+    }
+
+    body.high-contrast header,
+    body.high-contrast #sidebar,
+    body.high-contrast footer,
+    body.high-contrast #legend {
+      background: #0d1117;
+      color: #e6edf3;
+    }
+
+    body.high-contrast .metric-row .metric-value { color: #e6edf3; }
+    body.high-contrast .gauge-bar { background: #21262d; }
+    body.high-contrast .metric-bar { background: #21262d; }
+    body.high-contrast .metric-duo { background: #161b22; border-color: #30363d; }
+    body.high-contrast .duo-item:first-child { border-color: #30363d; }
+    body.high-contrast .green-ring::after { background: #0d1117; }
+
+    body.high-contrast .toggle-switch .toggle-track { background: #30363d; }
+    body.high-contrast .toggle-switch input:checked + .toggle-track { background: #58a6ff; }
+
+    body.high-contrast .maplibregl-popup-content {
+      background: #161b22 !important;
+      color: #e6edf3 !important;
+      border-color: #d29922 !important;
+    }
+
+    body.high-contrast .popup-title { color: #d29922; }
+
+    body.high-contrast .btn-sharp {
+      background: #21262d;
+      color: #e6edf3;
+      border-color: #8b949e;
+    }
+
+    body.high-contrast .btn-sharp:hover {
+      background: #58a6ff;
+      color: #0d1117;
+    }
+
+    body.high-contrast #narrative-panel {
+      background: #161b22;
+      border-color: #d29922;
+    }
+
+    body.high-contrast .interesting-row {
+      background: rgba(210,153,34,0.12);
+    }
+
+    body.high-contrast .curiosum {
+      background: linear-gradient(135deg, rgba(88,166,255,0.08), transparent);
+    }
+
+    body.high-contrast .sidebar-identity {
+      background: linear-gradient(135deg, rgba(210,153,34,0.1), transparent);
+    }
+
+    /* ---------- RESPONSIVE: Mobile ---------- */
+    @media (max-width: 820px) {
+      #app {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto 1fr auto auto;
+        grid-template-areas:
+          "header"
+          "map"
+          "sidebar"
+          "footer";
+      }
+
+      #sidebar {
+        max-height: 300px;
+        border-right: none;
+        border-top: var(--border-thin);
+      }
+
+      .metric-section { padding: 0.7rem 0.9rem; }
+
+      #legend {
+        bottom: 0.5rem;
+        left: 0.5rem;
+        min-width: 180px;
+        font-size: 0.65rem;
+      }
+
+      #narrative-panel {
+        width: 90%;
+        right: 5%;
+        bottom: 0.5rem;
+      }
+
+      header h1 { font-size: 1rem; }
+    }
+
+    .popup-links { margin-top: 0.4rem; font-size: 0.7rem; } .popup-links a { color: var(--papal-blue); text-underline-offset: 2px; }
+    #legend { padding: 0.3rem 0.5rem; min-width: 158px; font-size: 0.66rem; }
+    #legend.collapsed { transform: translateY(calc(100% - 22px)); }
+    #legend .legend-header { font-size: 0.66rem; padding-bottom: 0.15rem; margin-bottom: 0.1rem; }
+    .legend-row { padding: 0.1rem 0; gap: 0.3rem; }
+    .legend-swatch { width: 9px; height: 9px; }
+    .legend-count { font-size: 0.62rem; min-width: 1.8em; }
+    .toggle-switch { width: 14px; height: 14px; }
+    .toggle-switch .toggle-track::after { top: 1px; left: 1px; width: 10px; height: 10px; }
+    .toggle-switch input:checked + .toggle-track::after { transform: translateX(1px); }
+    .poi-chips { display: flex; flex-wrap: wrap; gap: 3px; padding-top: 0.25rem; max-width: 190px; }
+    .poi-chips[hidden] { display: none; }
+    .poi-chip { font: 500 0.6rem var(--font-body); padding: 1px 5px; border: 1px solid var(--gold); background: var(--paper); color: var(--ink); cursor: pointer; display: inline-flex; align-items: center; gap: 3px; }
+    .poi-chip i { width: 7px; height: 7px; display: inline-block; border-radius: 50%; }
+    .poi-chip[aria-pressed="false"] { opacity: 0.4; text-decoration: line-through; }
+    [hidden] { display: none !important; }
+    #btn-lang { font-weight: 600; letter-spacing: 0.08em; min-width: 2.4rem; }
+    #sights-list { display: flex; flex-direction: column; gap: 1px; }
+    .sight { display: flex; align-items: center; gap: 0.45rem; width: 100%; text-align: left; background: transparent; border: 0; border-bottom: 1px dotted #d4cfc4; padding: 0.28rem 0.1rem; cursor: pointer; font: 500 0.72rem var(--font-body); color: var(--ink); }
+    .sight:hover { background: rgba(201,169,89,0.12); }
+    .sight i { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .sight span { flex: 1; } .sight em { font-style: normal; font-size: 0.62rem; color: var(--muted); }
+    #btn-home { padding: 0.3rem 0.55rem; }
+    #btn-update:disabled { opacity: 0.5; cursor: progress; }
+    #data-badge { font-variant-numeric: tabular-nums; }
+    /* ---------- REFINEMENTS ---------- */
+    body { background-image: radial-gradient(ellipse at 50% 0%, rgba(201,169,89,0.07), transparent 60%); -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+    header { box-shadow: 0 1px 0 var(--paper), 0 3px 0 rgba(201,169,89,0.35); }
+    header h1 { font-size: 1.5rem; letter-spacing: 0.14em; }
+    header .subtitle { margin-top: 0.15rem; }
+    .metric-section, .curiosum, .sidebar-identity { animation: rise 0.6s cubic-bezier(.2,.7,.2,1) both; }
+    .metric-section:nth-of-type(1) { animation-delay: .05s; } .metric-section:nth-of-type(2) { animation-delay: .12s; }
+    .metric-section:nth-of-type(3) { animation-delay: .19s; } .metric-section:nth-of-type(4) { animation-delay: .26s; }
+    @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+    .curiosum-text::first-letter { font-family: var(--font-heading); font-size: 1.25em; color: var(--gold); }
+    #narrative-panel.visible { animation: rise 0.35s ease both; }
+    .legend-row:focus-within { background: rgba(201,169,89,0.1); }
+    .maplibregl-ctrl-group { border-radius: 0 !important; border: 1px solid var(--gold); box-shadow: 2px 2px 0 rgba(0,0,0,0.06) !important; }
+    .maplibregl-ctrl-group button { background-color: var(--paper); }
+    body.high-contrast .maplibregl-ctrl-group button { filter: invert(1); }
+    button:focus-visible, a:focus-visible { outline: 2px solid var(--terracotta); outline-offset: 2px; }
+    footer a:hover { color: var(--terracotta); }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+  </style>
+</head>
+
+<body>
+  <div id="app">
+    <!-- ==================== HEADER ==================== -->
+    <header>
+      <div>
+        <h1>Civitas Vaticana</h1>
+        <div class="subtitle">Tabula Cartographica · Ex Data Viva OpenStreetMap</div>
+      </div>
+      <div class="header-controls">
+        <button class="btn-sharp" id="btn-home" title="Totum" aria-label="Totum">⌂</button>
+        <button class="btn-sharp" id="btn-update" title="OpenStreetMap">Renovare</button>
+        <button class="btn-sharp" id="btn-3d" aria-pressed="false" aria-label="Visus Triplex">Visus Triplex</button>
+        <button class="btn-sharp" id="btn-orbit" hidden aria-pressed="false">Gyrus</button>
+        <button class="btn-sharp" id="btn-narrative" aria-pressed="false" aria-label="Modus Narrationis">Modus Narrationis</button>
+        <button class="btn-sharp" id="btn-lang" aria-label="Language" title="Language / Lingua">EN</button>
+        <button class="btn-sharp" id="btn-contrast" aria-pressed="false" aria-label="Modus Contrarius">Modus Contrarius</button>
+      </div>
+    </header>
+
+    <!-- ==================== MAP ==================== -->
+    <div id="map-container">
+      <div id="map"></div>
+
+      <!-- Progress bar -->
+      <div id="progress-container">
+        <div id="progress-text">
+          <span id="progress-label">Recipiuntur notitiae…</span>
+          <span id="progress-percent">0%</span>
+        </div>
+        <div id="progress-bar-outer">
+          <div id="progress-bar-inner"></div>
+        </div>
+      </div>
+
+      <!-- Error banner -->
+      <div id="error-banner" role="alert">
+        <span id="error-message"></span>
+        <button class="retry-btn" id="btn-retry">Retempta</button>
+      </div>
+
+      <!-- Legend -->
+      <div id="legend">
+        <div class="legend-header" id="legend-header">
+          <span>Legenda</span>
+          <span class="toggle-icon">▼</span>
+        </div>
+        <div class="legend-row" data-layer="buildings">
+          <div class="legend-swatch" style="background:#b8a88a;"></div>
+          <span class="legend-label">Aedificia</span>
+          <span class="legend-count" id="count-buildings">0</span>
+          <label class="toggle-switch">
+            <input type="checkbox" checked data-layer-toggle="buildings" aria-label="Aedificia">
+            <span class="toggle-track"></span>
+          </label>
+        </div>
+        <div class="legend-row" data-layer="highways">
+          <div class="legend-swatch" style="background:#c86a5a;"></div>
+          <span class="legend-label">Viae</span>
+          <span class="legend-count" id="count-highways">0</span>
+          <label class="toggle-switch">
+            <input type="checkbox" checked data-layer-toggle="highways" aria-label="Viae">
+            <span class="toggle-track"></span>
+          </label>
+        </div>
+        <div class="legend-row" data-layer="footpaths">
+          <div class="legend-swatch" style="background:#8a9a7a;"></div>
+          <span class="legend-label">Semitae Pedestres</span>
+          <span class="legend-count" id="count-footpaths">0</span>
+          <label class="toggle-switch">
+            <input type="checkbox" checked data-layer-toggle="footpaths" aria-label="Semitae Pedestres">
+            <span class="toggle-track"></span>
+          </label>
+        </div>
+        <div class="legend-row" data-layer="railways">
+          <div class="legend-swatch" style="background:#6b7280;"></div>
+          <span class="legend-label">Ferriviae</span>
+          <span class="legend-count" id="count-railways">0</span>
+          <label class="toggle-switch">
+            <input type="checkbox" checked data-layer-toggle="railways" aria-label="Ferriviae">
+            <span class="toggle-track"></span>
+          </label>
+        </div>
+        <div class="legend-row" data-layer="green">
+          <div class="legend-swatch" style="background:#7a9a6a;"></div>
+          <span class="legend-label">Area Viridis</span>
+          <span class="legend-count" id="count-green">0</span>
+          <label class="toggle-switch">
+            <input type="checkbox" checked data-layer-toggle="green" aria-label="Area Viridis">
+            <span class="toggle-track"></span>
+          </label>
+        </div>
+        <div class="legend-row" data-layer="pois">
+          <div class="legend-swatch" style="background:#c9a959;"></div>
+          <span class="legend-label">Puncta Interesse</span>
+          <span class="legend-count" id="count-pois">0</span>
+          <label class="toggle-switch">
+            <input type="checkbox" checked data-layer-toggle="pois" aria-label="Puncta Interesse">
+            <span class="toggle-track"></span>
+          </label>
+        </div>
+        <div id="poi-chips" class="poi-chips"></div>
+      </div>
+
+      <!-- Narrative panel -->
+      <div id="narrative-panel" role="dialog" aria-label="Modus Narrationis">
+        <button class="close-narrative" id="close-narrative" aria-label="Claudere">✕</button>
+        <h3 id="narrative-title">Basilica Sancti Petri</h3>
+        <p id="narrative-text">Basilica Sancti Petri, centrum fidei Catholicae, in corde Civitatis Vaticanae sita est. Aedificata est super sepulcrum Sancti Petri Apostoli.</p>
+        <div class="nav-buttons">
+          <button id="narrative-prev">← Prior</button>
+          <button id="narrative-next">Prox →</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SIDEBAR (Refined Metrics) ==================== -->
+    <aside id="sidebar" aria-label="Mensurae et Curiosa Vaticana">
+
+      <!-- Identity: flag + state name -->
+      <div class="sidebar-identity">
+        <div class="vatican-flag" role="img" aria-label="Vexillum Status Civitatis Vaticanae">
+          <div class="flag-yellow"></div>
+          <div class="flag-white">
+            <svg class="flag-emblem" viewBox="0 0 24 24" aria-hidden="true">
+              <!-- crossed keys -->
+              <line x1="6" y1="20" x2="18" y2="8" stroke="#c9a959" stroke-width="1.6"/>
+              <line x1="18" y1="20" x2="6" y2="8" stroke="#a8a8a8" stroke-width="1.6"/>
+              <circle cx="6" cy="8" r="2" fill="#fff" stroke="#c9a959" stroke-width="0.9"/>
+              <circle cx="18" cy="8" r="2" fill="#fff" stroke="#a8a8a8" stroke-width="0.9"/>
+              <!-- tiara -->
+              <path d="M 8.6 7 Q 12 1.6 15.4 7 Z" fill="#c9a959"/>
+              <rect x="8.6" y="7" width="6.8" height="1.2" fill="#c9a959"/>
+            </svg>
+          </div>
+        </div>
+        <div class="identity-text">
+          <div class="identity-name">Status Civitatis Vaticanae</div>
+          <div class="identity-sub">Minima civitas sui iuris mundi · 0.49 km² · circiter 800 incolae</div>
+        </div>
+      </div>
+
+      <!-- Section: Vie et Itinera -->
+      <div class="metric-section">
+        <h2 class="section-title">Via et Itinera</h2>
+
+        <div class="metric-block">
+          <div class="metric-header">
+            <span class="metric-name">Longitudo Viarum</span>
+            <span class="metric-value-lg" id="metric-roads">0 m</span>
+          </div>
+          <div class="metric-bar"><div class="metric-bar-fill" id="bar-roads"></div></div>
+        </div>
+
+        <div class="metric-block">
+          <div class="metric-header">
+            <span class="metric-name">Semitae Pedestres</span>
+            <span class="metric-value-lg" id="metric-footpaths">0 m</span>
+          </div>
+          <div class="metric-bar"><div class="metric-bar-fill" id="bar-footpaths"></div></div>
+        </div>
+
+        <div class="metric-block">
+          <div class="metric-header">
+            <span class="metric-name">Ferriviae</span>
+            <span class="metric-value-lg" id="metric-railways">0 m</span>
+          </div>
+          <div class="metric-bar"><div class="metric-bar-fill" id="bar-railways"></div></div>
+        </div>
+
+        <div class="interesting-row" id="row-longest-road">
+          <span class="interesting-label">Longissima Via</span>
+          <span class="interesting-value" id="interesting-longest-road">—</span>
+        </div>
+      </div>
+
+      <!-- Section: Aedificia -->
+      <div class="metric-section">
+        <h2 class="section-title">Aedificia</h2>
+
+        <div class="metric-duo">
+          <div class="duo-item">
+            <div class="duo-value" id="metric-building-count">0</div>
+            <div class="duo-label">Numerus</div>
+          </div>
+          <div class="duo-item">
+            <div class="duo-value" id="metric-building-area">0</div>
+            <div class="duo-label">Superficies</div>
+          </div>
+        </div>
+
+        <div class="metric-row">
+          <span class="metric-label">Densitas aedificiorum</span>
+          <span class="metric-value" id="metric-density">0 <small>/ha</small></span>
+        </div>
+
+        <div class="metric-row">
+          <span class="metric-label">Media altitudo</span>
+          <span class="metric-value" id="metric-avg-height">0 <small>m</small></span>
+        </div>
+
+        <div class="interesting-row" id="row-tallest">
+          <span class="interesting-label">Altissimum</span>
+          <span class="interesting-value" id="interesting-tallest">—</span>
+        </div>
+
+        <div class="gauge-container">
+          <div class="gauge-label">
+            <span>Qualitas: gradus aedificiorum noti</span>
+            <span id="gauge-percent">0%</span>
+          </div>
+          <div class="gauge-bar"><div class="gauge-fill" id="gauge-fill"></div></div>
+        </div>
+      </div>
+
+      <!-- Section: Area Viridis -->
+      <div class="metric-section">
+        <h2 class="section-title">Area Viridis</h2>
+        <div class="green-gauge">
+          <div class="green-ring" id="green-ring">
+            <span id="metric-green-pct">0%</span>
+          </div>
+          <div class="green-legend">
+            <strong>% visus in area viridi</strong>
+            Horti, prata, silvae intra prospectum
+          </div>
+        </div>
+      </div>
+
+      <!-- Section: Puncta Interesse -->
+      <div class="metric-section">
+        <h2 class="section-title">Puncta Interesse</h2>
+        <div class="poi-count-large">
+          <span id="metric-poi-count">0</span>
+          <span class="poi-count-label">puncta in visu</span>
+        </div>
+        <div class="chart-container">
+          <canvas id="pois-chart" aria-label="Distributio Puncta Interesse per categoriam"></canvas>
+        </div>
+      </div>
+
+      <div class="metric-section" id="sights-section" hidden>
+        <h2 class="section-title">Visenda</h2>
+        <div id="sights-list"></div>
+      </div>
+
+      <!-- Curiosum Vaticanum -->
+      <div class="curiosum">
+        <div class="curiosum-header">
+          <span class="curiosum-icon">✦</span>
+          <span>Curiosum Vaticanum</span>
+        </div>
+        <p class="curiosum-text" id="curiosum-text">…</p>
+      </div>
+    </aside>
+
+    <!-- ==================== FOOTER ==================== -->
+    <footer>
+      <div class="attribution-block">
+        <span>Data © <a href="https://www.openstreetmap.org/" target="_blank" rel="noopener">OpenStreetMap</a> contributores</span>
+        <span>·</span>
+        <span>Tabula © <a href="https://openfreemap.org/" target="_blank" rel="noopener">OpenFreeMap</a></span>
+        <span>·</span>
+        <span>Stylus: <a href="https://tiles.openfreemap.org/styles/positron" target="_blank" rel="noopener">Positron</a></span>
+      </div>
+      <div>
+        <span id="data-badge"></span><span> · </span><span id="footer-coords">41.9022° N, 12.4539° E</span>
+      </div>
+    </footer>
+  </div>
+
+  <script>
+    // ================================================================
+    // CIVITAS VATICANA — CARTOGRAPHIC APPLICATION
+    // All UI text in Latin. Zero API keys.
+    // ================================================================
+
+    // ---------- CONFIG ----------
+    const VATICAN_BBOX = [41.9002, 12.4457, 41.9075, 12.4585];
+    const VATICAN_CENTER = [12.4539, 41.9022];
+    const VA_FIT = [[12.4425, 41.8985], [12.4592, 41.9082]];
+    const OVERPASS_MIRRORS = [
+      'https://overpass-api.de/api/interpreter',
+      'https://overpass.kumi.systems/api/interpreter',
+      'https://overpass.private.coffee/api/interpreter',
+      'https://overpass.osm.jp/api/interpreter'
+    ];
+    const OVERPASS_TIMEOUT_MS = 90000;
+    const TOTAL_MIRRORS = OVERPASS_MIRRORS.length;
+
+    const STYLE_LIGHT = 'https://tiles.openfreemap.org/styles/positron';
+    const STYLE_DARK  = 'https://tiles.openfreemap.org/styles/openfreemap-dark';
+
+    // ---------- STATE ----------
+    let map;
+    let currentStyle = STYLE_LIGHT;
+    let geojsonData = null;
+    let featuresByLayer = {};
+    let metrics = {};
+    let is3DActive = false;
+    let isNarrativeActive = false;
+    let narrativeIndex = 0;
+    let isHighContrast = false;
+    let poisChart = null;
+    let VA_RINGS = [];
+    let orbitOn = false, orbitRaf = null;
+    let LANG = 'la';
+    const DOME = { lon: 12.45389, lat: 41.90217 };
+
+    function joinRings(segs) {
+      const eq = (a, b) => a[0] === b[0] && a[1] === b[1];
+      const rings = []; segs = segs.filter(q => q.length > 1).map(q => q.slice());
+      while (segs.length) {
+        let cur = segs.shift(), grew = true;
+        while (grew && !eq(cur[0], cur[cur.length - 1])) {
+          grew = false;
+          for (let i = 0; i < segs.length; i++) {
+            const q = segs[i];
+            if (eq(cur[cur.length - 1], q[0])) cur = cur.concat(q.slice(1));
+            else if (eq(cur[cur.length - 1], q[q.length - 1])) cur = cur.concat(q.slice(0, -1).reverse());
+            else if (eq(cur[0], q[q.length - 1])) cur = q.slice(0, -1).concat(cur);
+            else if (eq(cur[0], q[0])) cur = q.slice(1).reverse().concat(cur);
+            else continue;
+            segs.splice(i, 1); grew = true; break;
+          }
+        }
+        if (cur.length > 3) rings.push(cur);
+      }
+      return rings;
+    }
+    function pip(x, y, r) {
+      let c = false;
+      for (let i = 0, j = r.length - 1; i < r.length; j = i++) {
+        if ((r[i][1] > y) !== (r[j][1] > y) && x < (r[j][0] - r[i][0]) * (y - r[i][1]) / (r[j][1] - r[i][1]) + r[i][0]) c = !c;
+      }
+      return c;
+    }
+    const inVA = (x, y) => !VA_RINGS.length || VA_RINGS.some(r => pip(x, y, r));
+
+    const POI_NOISE = /^(bench|waste_basket|waste_disposal|bicycle_parking|parking|parking_entrance|parking_space|vending_machine|shelter|recycling|bicycle_rental|motorcycle_parking|clock|post_box|telephone|charging_station|loading_dock)$/;
+    const POI_CATS = {
+      sacra:     { label: 'Sacra',          color: '#1a2a4a' },
+      musea:     { label: 'Musea',             color: '#9b3d2e' },
+      artes:     { label: 'Artes et Litterae', color: '#d27a5e' },
+      monumenta: { label: 'Monumenta',      color: '#b08a2e' },
+      cibus:     { label: 'Cibus et Potus', color: '#5f8a4f' },
+      servitia:  { label: 'Servitia',       color: '#6f6a5e' }
+    };
+    const poiColor = (label) => (Object.values(POI_CATS).find(c => c.label === label) || { color: '#b8a88a' }).color;
+    const POI_ICON_SPEC = {};
+    const poiCatOff = new Set();
+    const POI_SIZE = ['interpolate', ['linear'], ['zoom'], 15, 0.38, 17, 0.55, 19, 0.75];
+    const POI_SIZE_HI = ['interpolate', ['linear'], ['zoom'], 15, 0.5, 17, 0.75, 19, 1];
+
+    function classifyPOI(t) {
+      const a = t.amenity || '', tr = t.tourism || '', h = t.historic || '';
+      if (POI_NOISE.test(a)) return null;
+      const R = [
+        [a === 'place_of_worship', 'sacra', 'cross', 'Ecclesia'],
+        [tr === 'museum', 'musea', 'museum', 'Museum'],
+        [tr === 'gallery', 'musea', 'art', 'Pinacotheca'],
+        [tr === 'artwork', 'artes', 'art', 'Opus artis'],
+        [a === 'library', 'artes', 'library', 'Bibliotheca'],
+        [/^(theatre|arts_centre)$/.test(a), 'artes', 'art', 'Theatrum'],
+        [a === 'fountain', 'monumenta', 'fountain', 'Fons'],
+        [/^(monument|memorial)$/.test(h), 'monumenta', 'obelisk', 'Monumentum'],
+        [/^(archaeological_site|ruins)$/.test(h), 'monumenta', 'obelisk', 'Vestigia'],
+        [!!h, 'monumenta', 'obelisk', 'Locus historicus'],
+        [/^(attraction|viewpoint)$/.test(tr), 'monumenta', 'star', 'Visendum'],
+        [/^(restaurant|fast_food|ice_cream|food_court)$/.test(a), 'cibus', 'food', 'Taberna'],
+        [/^(cafe|bar|pub)$/.test(a), 'cibus', 'cup', 'Caupona'],
+        [/^(hotel|guest_house|hostel|apartment|motel)$/.test(tr), 'servitia', 'H', 'Hospitium'],
+        [tr === 'information', 'servitia', 'i', 'Informationes'],
+        [/^(pharmacy|clinic|hospital|doctors|dentist)$/.test(a), 'servitia', 'plus', 'Valetudo'],
+        [/^(bank|atm|bureau_de_change)$/.test(a), 'servitia', 'euro', 'Pecunia'],
+        [a === 'post_office', 'servitia', 'mail', 'Statio postalis'],
+        [a === 'toilets', 'servitia', 'wc', 'Latrinae'],
+        [/^(police|fire_station)$/.test(a), 'servitia', 'shield', 'Securitas'],
+        [!!(a || tr), 'servitia', 'dot', 'Servitium']
+      ];
+      const r = R.find(x => x[0]);
+      if (!r) return null;
+      const cat = POI_CATS[r[1]];
+      const iconId = `poi-${r[2]}-${r[1]}`;
+      POI_ICON_SPEC[iconId] = { icon: r[2], color: cat.color };
+      return { ...cat, iconId, sub: r[3] };
+    }
+
+    function makePoiIcon(kind, color) {
+      const S = 44, c = document.createElement('canvas');
+      c.width = c.height = S * 2;
+      const x = c.getContext('2d');
+      x.scale(2, 2);
+      x.beginPath(); x.arc(22, 22, 19, 0, 7); x.fillStyle = color; x.fill();
+      x.lineWidth = 3; x.strokeStyle = '#fff'; x.stroke();
+      x.strokeStyle = x.fillStyle = '#fff'; x.lineWidth = 2.6; x.lineCap = x.lineJoin = 'round';
+      const T = (t, f) => { x.font = `700 ${f || 20}px Georgia, serif`; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(t, 22, 23); };
+      const L = (...q) => { x.beginPath(); x.moveTo(q[0], q[1]); for (let i = 2; i < q.length; i += 2) x.lineTo(q[i], q[i + 1]); x.stroke(); };
+      switch (kind) {
+        case 'cross': L(22, 10, 22, 35); L(14, 18, 30, 18); break;
+        case 'museum': L(10, 18, 22, 10, 34, 18, 10, 18); L(14, 21, 14, 30); L(22, 21, 22, 30); L(30, 21, 30, 30); L(10, 34, 34, 34); break;
+        case 'art': x.strokeRect(11, 13, 22, 18); L(13, 28, 19, 21, 23, 26, 26, 23, 31, 28); break;
+        case 'library': x.beginPath(); x.moveTo(22, 15); x.quadraticCurveTo(15, 12, 10, 14); x.lineTo(10, 30); x.quadraticCurveTo(15, 28, 22, 31); x.quadraticCurveTo(29, 28, 34, 30); x.lineTo(34, 14); x.quadraticCurveTo(29, 12, 22, 15); x.stroke(); L(22, 15, 22, 31); break;
+        case 'obelisk': L(22, 9, 26, 16, 25, 33, 19, 33, 18, 16, 22, 9); L(14, 34, 30, 34); break;
+        case 'fountain': x.beginPath(); x.moveTo(22, 9); x.bezierCurveTo(26, 16, 31, 20, 31, 26); x.arc(22, 26, 9, 0, Math.PI); x.bezierCurveTo(13, 20, 18, 16, 22, 9); x.fill(); break;
+        case 'star': x.beginPath(); for (let i = 0; i < 10; i++) { const r = i % 2 ? 6 : 13, an = -Math.PI / 2 + i * Math.PI / 5; x.lineTo(22 + r * Math.cos(an), 22.5 + r * Math.sin(an)); } x.closePath(); x.fill(); break;
+        case 'food': L(15, 10, 15, 34); L(11, 10, 11, 19, 19, 19, 19, 10); L(29, 10, 33, 18, 29, 23, 29, 34); break;
+        case 'cup': L(12, 17, 12, 28, 16, 32, 24, 32, 28, 28, 28, 17, 12, 17); x.beginPath(); x.arc(30, 23, 4, -1.5, 1.5); x.stroke(); break;
+        case 'H': T('H'); break;
+        case 'i': T('i', 24); break;
+        case 'plus': L(22, 12, 22, 32); L(12, 22, 32, 22); break;
+        case 'euro': T('€'); break;
+        case 'mail': x.strokeRect(10, 14, 24, 16); L(10, 14, 22, 24, 34, 14); break;
+        case 'wc': T('WC', 15); break;
+        case 'shield': L(22, 10, 32, 14, 31, 26, 22, 34, 13, 26, 12, 14, 22, 10); break;
+        default: x.beginPath(); x.arc(22, 22, 4.5, 0, 7); x.fill();
+      }
+      return x.getImageData(0, 0, S * 2, S * 2);
+    }
+
+    function poiRank(t, cat) {
+      let r = 0;
+      if (t.wikipedia || t.wikidata) r += 3;
+      if (cat.label === 'Sacra' || cat.label === 'Musea') r += 2; else if (cat.label === 'Monumenta') r += 1;
+      if (/basilica|capella|sacellum|musea|museum|palazzo|palatium|chapel|peter|pietro|sistin/i.test(t.name || '')) r += 1;
+      return r;
+    }
+    function dedupePois(arr) {
+      arr.sort((a, b) => (b.properties.rank || 0) - (a.properties.rank || 0));
+      const out = [];
+      arr.forEach(f => {
+        const n = f.properties.name.toLowerCase(), [x, y] = f.geometry.coordinates;
+        if (out.some(o => o.properties.name.toLowerCase() === n && Math.hypot((o.geometry.coordinates[0] - x) * 82900, (o.geometry.coordinates[1] - y) * 110540) < 80)) return;
+        out.push(f);
+      });
+      return out;
+    }
+    const poiLabelExpr = () => ['step', ['zoom'], '', 16.6, LANG === 'en' ? ['coalesce', ['get', 'name:en'], ['get', 'name']] : ['coalesce', ['get', 'name:la'], ['get', 'name']]];
+
+    function applyPoiFilter() {
+      if (!map.getLayer('pois-layer')) return;
+      map.setFilter('pois-layer', poiCatOff.size ? ['match', ['get', 'poi_cat'], [...poiCatOff], false, true] : null);
+    }
+
+    function ringAreaM2(r) {
+      let a = 0;
+      for (let i = 0; i < r.length - 1; i++) a += r[i][0] * r[i + 1][1] - r[i + 1][0] * r[i][1];
+      return Math.abs(a / 2) * 111320 * Math.cos(41.9 * Math.PI / 180) * 110540;
+    }
+    function buildingHeight(f) {
+      const t = f.properties, ring = ((f.geometry && f.geometry.coordinates) || [[]])[0] || [];
+      const area = ring.length > 3 ? ringAreaM2(ring) : 0;
+      const m = parseFloat(String(t.height || '').replace(',', '.'));
+      if (m > 0) return m;
+      if (ring.length > 3 && area > 8000) {
+        const cx = ring.reduce((a, c) => a + c[0], 0) / ring.length, cy = ring.reduce((a, c) => a + c[1], 0) / ring.length;
+        if (Math.hypot((cx - DOME.lon) * 111320 * Math.cos(DOME.lat * Math.PI / 180), (cy - DOME.lat) * 110540) < 130) { t.bas = 1; return 46; }
+      }
+      const lv = parseFloat(t['building:levels']);
+      if (lv > 0) return lv * 3.4 + 1;
+      const d = { cathedral: 45, basilica: 46, church: 22, chapel: 12, palace: 22, museum: 16, public: 14, civic: 14, government: 14, house: 8, residential: 12, apartments: 16, garage: 4, garages: 4, shed: 3, roof: 5, service: 6, kiosk: 3, school: 12, hospital: 16, tower: 30 };
+      if (d[t.building]) return d[t.building];
+      return area < 60 ? 4 : area < 250 ? 8 : area < 800 ? 12 : area < 2500 ? 16 : 20;
+    }
+
+    // ---------- DOM HELPERS ----------
+    const esc = (v) => String(v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const $ = (sel) => document.querySelector(sel);
+    const $$ = (sel) => document.querySelectorAll(sel);
+
+    const progressContainer = $('#progress-container');
+    const progressBar = $('#progress-bar-inner');
+    const progressPercent = $('#progress-percent');
+    const progressLabel = $('#progress-label');
+    const errorBanner = $('#error-banner');
+    const errorMessage = $('#error-message');
+
+    // ================================================================
+    // STATIC GEOJSON FALLBACK
+    // ================================================================
+    const STATIC_FALLBACK = {
+      type: 'FeatureCollection',
+      features: [
+        {
+          type: 'Feature',
+          properties: { building: 'basilica', 'building:levels': '4', name: 'Basilica Sancti Petri' },
+          geometry: {
+            type: 'Polygon',
+            coordinates: [[
+              [12.4530, 41.9020], [12.4550, 41.9020],
+              [12.4550, 41.9030], [12.4530, 41.9030],
+              [12.4530, 41.9020]
+            ]]
+          }
+        },
+        {
+          type: 'Feature',
+          properties: { building: 'chapel', 'building:levels': '3', name: 'Sacellum Sixtinum' },
+          geometry: {
+            type: 'Polygon',
+            coordinates: [[
+              [12.4538, 41.9026], [12.4546, 41.9026],
+              [12.4546, 41.9032], [12.4538, 41.9032],
+              [12.4538, 41.9026]
+            ]]
+          }
+        },
+        {
+          type: 'Feature',
+          properties: { building: 'palace', 'building:levels': '5', name: 'Palatium Apostolicum' },
+          geometry: {
+            type: 'Polygon',
+            coordinates: [[
+              [12.4532, 41.9032], [12.4542, 41.9032],
+              [12.4542, 41.9040], [12.4532, 41.9040],
+              [12.4532, 41.9032]
+            ]]
+          }
+        },
+        {
+          type: 'Feature',
+          properties: { building: 'museum', 'building:levels': '3', name: 'Musea Vaticana' },
+          geometry: {
+            type: 'Polygon',
+            coordinates: [[
+              [12.4520, 41.9038], [12.4530, 41.9038],
+              [12.4530, 41.9046], [12.4520, 41.9046],
+              [12.4520, 41.9038]
+            ]]
+          }
+        }
+      ]
+    };
+
+    // ================================================================
+    // CURIOSA VATICANA — rotating editorial facts (in Latin)
+    // ================================================================
+    const CURIOSA_VATICANA = [
+      'Civitas Vaticana est minima civitas sui iuris in mundo — vix 0.49 km², minor quam multi horti publici.',
+      'Basilica Sancti Petri, 136.6 m alta, maxima ecclesia Christiana in orbe terrarum habetur.',
+      'Cohors Helvetica, a Papa Iulio II anno 1506 condita, Papam iam per quinque saecula custodit.',
+      'Obeliscus in Foro Sancti Petri 25.5 m altus est — ex Aegypto antiqua Romam advectus, anno 1586 erectus.',
+      'Bibliotheca Apostolica Vaticana, anno 1475 condita, inter vetustissimas bibliothecas mundi numeratur.',
+      'Civitas Vaticana circiter 800 incolas habet — minima populatio inter omnes civitates sui iuris.',
+      'Musea Vaticana circiter 70,000 opera artis continent, inter quae Laocoon et Stanzae Raphaelis.',
+      'Sacellum Sixtinum a Michelangelo inter 1508 et 1512 pictum est; tectum "Creatio Adam" inter summa opera artis numeratur.',
+      'Status Civitatis Vaticanae anno 1929 Pactis Lateranensibus cum Italia constitutus est, post annos "Quaestionis Romanae".',
+      'Horti Vaticani circiter 23 hectaria occupant — fere dimidium territorii totius civitatis.',
+      'Civitas Vaticana nullum carcerem proprium habet; qui delicta committunt in carcerem Italicum deducuntur.',
+      'Basilica Sancti Petri super sepulcrum Apostoli Petri sita est — locus martyrii eius in Circo Neronis.',
+      'Gendarmeria Vaticana ordini publico prospicit, Cohors Helvetica Papam custodit; neutra extra fines civitatis iurisdictionem habet.',
+      'Typographia Vaticana, anno 1587 condita, inter antiquissimas typographias Europae numeratur.',
+      'Ferrivia Vaticana, circiter 300 metra longa, una ex minimis ferriviis nationalibus orbis terrarum est.'
+    ];
+
+    const EN = {"Civitas Vaticana": "Vatican City", "Tabula Cartographica · Ex Data Viva OpenStreetMap": "Cartographic Map · Live OpenStreetMap Data", "Visus Triplex": "3D View", "Gyrus": "Orbit", "Renovare": "Update live", "Notitiae servatae": "Preloaded data", "Notitiae vivae": "Live data", "Visenda": "Must-see sights", "Totum": "Whole state", "Renovatio defecit — notitiae servatae manent.": "Update failed — preloaded data kept.", "Modus Narrationis": "Story Mode", "Modus Contrarius": "High Contrast", "Recipiuntur notitiae…": "Loading data…", "Retempta": "Retry", "Legenda": "Legend", "Aedificia": "Buildings", "Viae": "Roads", "Semitae Pedestres": "Footpaths", "Ferriviae": "Railways", "Area Viridis": "Green areas", "Puncta Interesse": "Points of Interest", "← Prior": "← Previous", "Prox →": "Next →", "Status Civitatis Vaticanae": "State of Vatican City", "Minima civitas sui iuris mundi · 0.49 km² · circiter 800 incolae": "World’s smallest sovereign state · 0.49 km² · about 800 residents", "Via et Itinera": "Roads & Routes", "Longitudo Viarum": "Road length", "Longissima Via": "Longest road", "Numerus": "Count", "Superficies": "Area", "Densitas aedificiorum": "Building density", "Media altitudo": "Average height", "Altissimum": "Tallest", "Qualitas: gradus aedificiorum noti": "Data quality: buildings with known levels", "% visus in area viridi": "% of view in green area", "Horti, prata, silvae intra prospectum": "Gardens, meadows, woods in view", "puncta in visu": "points in view", "Curiosum Vaticanum": "Vatican Curiosity", "contributores": "contributors", "Stylus:": "Style:", "Vexillum Status Civitatis Vaticanae": "Flag of Vatican City State", "Distributio Puncta Interesse per categoriam": "Points of interest by category", "Mensurae et Curiosa Vaticana": "Vatican measures & curiosities", "Claudere": "Close", "Basilica Sancti Petri": "St. Peter’s Basilica", "Via sine nomine": "Unnamed road", "Aedificium sine nomine": "Unnamed building", "Punctum Interesse": "Point of interest", "Gradus": "Levels", "Altitudo": "Height", "Media Vaticana": "Vatican average", "Nescio": "Unknown", "(aestimata)": "(estimated)", "Hoc": "This one", "Media Vat.": "Vatican avg", "Categoria": "Category", "Species": "Type", "Hora": "Hours", "Telephonum": "Phone", "Annus": "Year", "Descriptio": "Description", "Situs": "Website", "Sacra": "Sacred", "Musea": "Museums", "Artes et Litterae": "Arts & Letters", "Monumenta": "Monuments", "Cibus et Potus": "Food & Drink", "Servitia": "Services", "Ecclesia": "Church", "Pinacotheca": "Gallery", "Opus artis": "Artwork", "Bibliotheca": "Library", "Theatrum": "Theatre", "Fons": "Fountain", "Monumentum": "Monument", "Vestigia": "Ruins", "Locus historicus": "Historic site", "Visendum": "Landmark", "Taberna": "Restaurant", "Caupona": "Café & bar", "Hospitium": "Lodging", "Informationes": "Information", "Valetudo": "Health", "Pecunia": "Banking", "Statio postalis": "Post office", "Latrinae": "Toilets", "Securitas": "Security", "Servitium": "Service", "Data viva non praesto — tabula vetus monstratur.": "Live data unavailable — showing the archive map."};
+    const LA_OF = Object.fromEntries(Object.entries(EN).map(([k, v]) => [v, k]));
+    const T = (x) => (LANG === 'en' && EN[x]) || x;
+    const CURIOSA_EN = ["Vatican City is the smallest sovereign state in the world — barely 0.49 km², smaller than many public parks.", "St. Peter’s Basilica, 136.6 m tall, is considered the largest Christian church in the world.", "The Swiss Guard, founded by Pope Julius II in 1506, has protected the Pope for five centuries.", "The obelisk in St. Peter’s Square stands 25.5 m high — brought from ancient Egypt to Rome and raised in 1586.", "The Vatican Apostolic Library, founded in 1475, ranks among the oldest libraries in the world.", "Vatican City has about 800 residents — the smallest population of any sovereign state.", "The Vatican Museums hold about 70,000 works of art, including the Laocoön and the Raphael Rooms.", "Michelangelo painted the Sistine Chapel between 1508 and 1512; the ceiling’s “Creation of Adam” ranks among the greatest works of art.", "The State of Vatican City was established in 1929 by the Lateran Pacts with Italy, ending the long “Roman Question.”", "The Vatican Gardens cover about 23 hectares — nearly half the territory of the whole state.", "Vatican City has no prison of its own; offenders are taken to an Italian prison.", "St. Peter’s Basilica stands over the tomb of the Apostle Peter — the site of his martyrdom in Nero’s Circus.", "The Vatican Gendarmerie keeps public order and the Swiss Guard protects the Pope; neither has jurisdiction beyond the state’s borders.", "The Vatican Press, founded in 1587, is among the oldest printing houses in Europe.", "The Vatican Railway, only about 300 meters long, is one of the shortest national railways in the world."];
+    const NARRATIVE_EN = [{"title": "St. Peter’s Basilica", "text": "St. Peter’s Basilica, the heart of Catholic faith, stands at the center of Vatican City. It was built over the tomb of the Apostle Peter. Its architecture, shaped by Bramante, Michelangelo and Bernini, is the crowning symbol of Christendom worldwide."}, {"title": "Sistine Chapel", "text": "The Sistine Chapel, consecrated by Pope Sixtus IV in 1483, is famed for the frescoes painted by Michelangelo. Here the papal conclave elects the Pope. The ceiling’s “Creation of Adam” ranks among the most important works of Christian art."}, {"title": "Vatican Gardens", "text": "The Vatican Gardens, covering nearly half of Vatican City, are a haven of tranquility. Fountains, statues and plants gathered from around the world adorn them. The Pope is accustomed to walk here."}, {"title": "Governorate Palace", "text": "The Governorate Palace is the seat of the Governorate of Vatican City State, which handles the city’s daily administration. Standing beside the Basilica, the building carries out the functions of government and justice."}];
+    let curShown = 0;
+    const curText = (i) => LANG === 'en' ? CURIOSA_EN[i] : CURIOSA_VATICANA[i];
+    function renderNarrativeText() {
+      const st = NARRATIVE_STOPS[narrativeIndex], en = NARRATIVE_EN[narrativeIndex];
+      if (!st) return;
+      $('#narrative-title').textContent = LANG === 'en' ? en.title : st.title;
+      $('#narrative-text').textContent = LANG === 'en' ? en.text : st.text;
+    }
+    function translateDom(toEn) {
+      const dict = toEn ? EN : LA_OF;
+      const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+      let n;
+      while ((n = w.nextNode())) {
+        const pe = n.parentElement;
+        if (!pe || /^(SCRIPT|STYLE)$/.test(pe.tagName)) continue;
+        const k = n.nodeValue.trim();
+        if (k && dict[k]) n.nodeValue = n.nodeValue.replace(k, dict[k]);
+      }
+      document.querySelectorAll('[aria-label],[title]').forEach(el => ['aria-label', 'title'].forEach(a => {
+        const v = el.getAttribute(a); if (v && dict[v]) el.setAttribute(a, dict[v]);
+      }));
+    }
+    function setLang(l) {
+      if (l === LANG) return;
+      LANG = l; translateDom(l === 'en');
+      document.documentElement.lang = l === 'en' ? 'en' : 'la';
+      $('#btn-lang').textContent = l === 'en' ? 'LA' : 'EN';
+      const c = $('#curiosum-text'); if (c) c.textContent = curText(curShown);
+      if (isNarrativeActive) renderNarrativeText();
+      if (map.getLayer('pois-layer')) map.setLayoutProperty('pois-layer', 'text-field', poiLabelExpr());
+      renderBadge();
+      if (featuresByLayer) { updateMetrics(); renderSights(); }
+    }
+
+    let curiosumIndex = 0;
+
+    function rotateCuriosum() {
+      const el = $('#curiosum-text');
+      if (!el) return;
+      el.style.opacity = '0';
+      setTimeout(() => {
+        curShown = curiosumIndex;
+        el.textContent = curText(curShown);
+        curiosumIndex = (curiosumIndex + 1) % CURIOSA_VATICANA.length;
+        el.style.opacity = '1';
+      }, 300);
+    }
+
+    // ================================================================
+    // 1. INIT MAP
+    // ================================================================
+    function initMap() {
+      map = new maplibregl.Map({
+        container: 'map',
+        style: currentStyle,
+        bounds: VA_FIT,
+        fitBoundsOptions: { padding: 28 },
+        pitch: 0,
+        maxPitch: 75,
+        bearing: 0,
+        maxZoom: 19,
+        minZoom: 13,
+        attributionControl: false,
+        antialias: true
+      });
+
+      map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
+
+      map.on('load', () => {
+        console.log('Map loaded — style:', currentStyle);
+        loadInitialData();
+      });
+
+      map.on('moveend', () => {
+        if (!orbitOn && featuresByLayer && Object.keys(featuresByLayer).length > 0) {
+          updateMetrics();
+          updateFooterCoords();
+        }
+      });
+
+      map.on('click', (e) => handleMapClick(e));
+      ['mousedown', 'touchstart', 'wheel'].forEach(ev => map.on(ev, () => { if (orbitOn) stopOrbit(); }));
+
+      map.on('error', (e) => {
+        console.warn('Map style error:', e);
+        if (e.error && e.error.status === 404 && /\/styles\//.test(e.error.url || '') && currentStyle === STYLE_LIGHT) {
+          console.warn('Positron style failed, falling back to Liberty');
+          currentStyle = 'https://tiles.openfreemap.org/styles/liberty';
+          map.setStyle(currentStyle);
+        }
+      });
+    }
+
+    // ================================================================
+    // 2. OVERPASS PIPELINE
+    // ================================================================
+    function buildOverpassQuery() {
+      return `
+        [out:json][timeout:90];
+        area["ISO3166-1"="VA"]["admin_level"="2"]->.va;
+        rel["ISO3166-1"="VA"]["admin_level"="2"]["boundary"="administrative"];
+        out geom;
+        (
+          way["building"](area.va);
+          way["highway"](area.va);
+          way["railway"](area.va);
+          rel["building"](area.va);
+          way["tourism"](area.va); way["amenity"](area.va); way["historic"](area.va);
+          rel["tourism"](area.va); rel["amenity"](area.va); rel["historic"](area.va);
+          way["leisure"="garden"](area.va);
+          way["landuse"~"grass|forest|meadow"](area.va);
+          node["tourism"](area.va);
+          node["amenity"](area.va);
+          node["historic"](area.va);
+        );
+        out geom;
+      `;
+    }
+
+    let dataInfo = null;
+    function renderBadge() {
+      const el = $('#data-badge');
+      if (el && dataInfo) { el.textContent = `${T(dataInfo.source === 'live' ? 'Notitiae vivae' : 'Notitiae servatae')} · ${dataInfo.date}`; }
+    }
+    function ingestData(data, source) {
+      geojsonData = data;
+      featuresByLayer = parseOverpassToLayers(data);
+      addDataLayers();
+      updateMetrics();
+      updateFooterCoords();
+      renderSights();
+      dataInfo = { source, date: ((data.osm3s && data.osm3s.timestamp_osm_base) || new Date().toISOString()).slice(0, 10) };
+      renderBadge();
+    }
+    async function loadInitialData() {
+      try {
+        const r = await fetch('data/snapshot.json', { cache: 'no-cache' });
+        if (r.ok) {
+          const d = await r.json();
+          if (d.elements && d.elements.length) { ingestData(d, 'snapshot'); return; }
+        }
+      } catch (e) { /* no snapshot (e.g. opened from disk) → go live */ }
+      fetchOverpassData();
+    }
+    function renderSights() {
+      const box = $('#sights-list');
+      if (!box || !featuresByLayer) return;
+      const top = [...(featuresByLayer.pois || [])].sort((a, b) => (b.properties.rank || 0) - (a.properties.rank || 0) || a.properties.name.localeCompare(b.properties.name)).slice(0, 8);
+      box.innerHTML = '';
+      top.forEach(f => {
+        const q = f.properties, b = document.createElement('button');
+        b.className = 'sight';
+        b.innerHTML = `<i style="background:${esc(q.poi_color)}"></i><span>${esc((LANG === 'en' ? q['name:en'] : q['name:la']) || q.name)}</span><em>${esc(T(q.poi_sub))}</em>`;
+        b.addEventListener('click', () => {
+          const cb = $('[data-layer-toggle="pois"]');
+          if (!cb.checked) { cb.checked = true; cb.dispatchEvent(new Event('change')); }
+          map.flyTo({ center: f.geometry.coordinates, zoom: 18, duration: 1600, essential: true });
+        });
+        box.appendChild(b);
+      });
+      $('#sights-section').hidden = top.length === 0;
+    }
+    function fitState() {
+      if (orbitOn) stopOrbit();
+      map.fitBounds(VA_FIT, { padding: 28, pitch: is3DActive ? 55 : 0, bearing: 0, duration: 1000 });
+    }
+
+    function fetchOverpassData(manual) {
+      const ub = $('#btn-update'); if (ub) ub.disabled = true;
+      showProgress(true);
+      setProgress(0, 'Recipiuntur notitiae…');
+      hideError();
+
+      const query = buildOverpassQuery();
+      const encoded = encodeURIComponent(query);
+
+      let mirrorIndex = 0;
+      let lastErrorDetail = '';
+      let completedMirrors = 0;
+
+      function tryNextMirror() {
+        if (mirrorIndex >= TOTAL_MIRRORS) {
+          showProgress(false);
+          const msg = `Impossibile notitias recipere. Quaeso retempta.${lastErrorDetail ? ' (' + lastErrorDetail + ')' : ''}`;
+          showError(msg);
+          console.error('All Overpass mirrors failed.');
+          if (manual && featuresByLayer) showError(T('Renovatio defecit — notitiae servatae manent.'));
+          else if (!featuresByLayer) loadStaticFallback();
+          return;
+        }
+
+        const mirrorUrl = OVERPASS_MIRRORS[mirrorIndex];
+        const mirrorName = new URL(mirrorUrl).hostname;
+        progressLabel.textContent = `Coniungitur ad ${mirrorName}… (${mirrorIndex + 1}/${TOTAL_MIRRORS})`;
+
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', mirrorUrl, true);
+        xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+        xhr.timeout = OVERPASS_TIMEOUT_MS;
+
+        xhr.onprogress = (event) => {
+          if (event.lengthComputable) {
+            const pct = Math.round((event.loaded / event.total) * 100);
+            const base = (completedMirrors / TOTAL_MIRRORS) * 100;
+            const current = (pct / 100) * (100 / TOTAL_MIRRORS);
+            setProgress(Math.min(base + current, 99),
+              `${mirrorName}: ${pct}% (${formatBytes(event.loaded)} / ${formatBytes(event.total)})`);
+          } else {
+            const base = (completedMirrors / TOTAL_MIRRORS) * 100;
+            setProgress(base + 2, `${mirrorName}: accipiuntur notitiae…`);
+          }
+        };
+
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            try {
+              const data = JSON.parse(xhr.responseText);
+              if (data.elements && data.elements.length > 0) {
+                console.log(`Mirror ${mirrorName} succeeded with ${data.elements.length} elements`);
+                completedMirrors++;
+                setProgress(100, 'Notitiae receptae.');
+                ingestData(data, 'live');
+                setTimeout(() => showProgress(false), 500);
+                return;
+              } else {
+                lastErrorDetail = 'Nulla elementa recepta';
+              }
+            } catch (err) {
+              lastErrorDetail = `JSON invalidum (HTTP ${xhr.status})`;
+            }
+          } else {
+            lastErrorDetail = `HTTP ${xhr.status}`;
+          }
+          mirrorIndex++;
+          completedMirrors++;
+          tryNextMirror();
+        };
+
+        xhr.onerror = () => {
+          lastErrorDetail = 'Error retis';
+          mirrorIndex++;
+          completedMirrors++;
+          tryNextMirror();
+        };
+
+        xhr.ontimeout = () => {
+          lastErrorDetail = 'Tempus exhaustum (90s)';
+          mirrorIndex++;
+          completedMirrors++;
+          tryNextMirror();
+        };
+
+        xhr.send('data=' + encoded);
+      }
+
+      tryNextMirror();
+    }
+
+    function formatBytes(bytes) {
+      if (bytes < 1024) return bytes + ' B';
+      if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+      return (bytes / 1048576).toFixed(1) + ' MB';
+    }
+
+    function setProgress(pct, label) {
+      progressBar.style.width = Math.min(pct, 100) + '%';
+      progressPercent.textContent = Math.round(Math.min(pct, 100)) + '%';
+      if (label) progressLabel.textContent = label;
+    }
+
+    function showProgress(visible) {
+      progressContainer.classList.toggle('visible', visible);
+      if (!visible) { const ub = $('#btn-update'); if (ub) ub.disabled = false; }
+      if (!visible) {
+        progressBar.style.width = '0%';
+        progressPercent.textContent = '0%';
+      }
+    }
+
+    function showError(msg) {
+      errorMessage.textContent = msg;
+      errorBanner.classList.add('visible');
+    }
+
+    function hideError() {
+      errorBanner.classList.remove('visible');
+    }
+
+    function loadStaticFallback() {
+      showError(T('Data viva non praesto — tabula vetus monstratur.'));
+      featuresByLayer = parseOverpassToLayers({ elements: [] }, STATIC_FALLBACK);
+      addDataLayers();
+      updateMetrics();
+    }
+
+    // ================================================================
+    // 3. PARSE OVERPASS JSON → GeoJSON Layers
+    // ================================================================
+    function parseOverpassToLayers(osmData, staticFallback) {
+      const layers = { buildings: [], highways: [], footpaths: [], railways: [], green: [], pois: [] };
+
+      if (staticFallback && staticFallback.features) {
+        layers.buildings = staticFallback.features.map(f => ({
+          type: 'Feature',
+          properties: f.properties,
+          geometry: f.geometry
+        }));
+      }
+
+      const elements = osmData.elements || [];
+      const bSegs = [];
+      elements.forEach(el => {
+        if (el.type === 'relation' && el.tags && el.tags.boundary && el.members) {
+          el.members.forEach(m => { if (m.type === 'way' && m.role !== 'inner' && m.geometry) bSegs.push(m.geometry.map(q => [q.lon, q.lat])); });
+        }
+      });
+      if (bSegs.length) VA_RINGS = joinRings(bSegs);
+      const addPoi = (t, x, y, id, type) => {
+        const cat = classifyPOI(t);
+        if (!cat || !t.name || !inVA(x, y)) return;
+        layers.pois.push({
+          type: 'Feature',
+          properties: { ...t, osm_id: id, osm_type: type, poi_cat: cat.label, poi_color: cat.color, poi_icon: cat.iconId, poi_sub: cat.sub, rank: poiRank(t, cat) },
+          geometry: { type: 'Point', coordinates: [x, y] }
+        });
+      };
+
+      elements.forEach(el => {
+        const tags = el.tags || {};
+        let feature = null;
+
+        if (el.type === 'relation') {
+          if (tags.boundary || !el.members) return;
+          const outers = [], inners = [];
+          el.members.forEach(m => { if (m.type === 'way' && m.geometry) (m.role === 'inner' ? inners : outers).push(m.geometry.map(q => [q.lon, q.lat])); });
+          const oRings = joinRings(outers), iRings = joinRings(inners);
+          if (!oRings.length) return;
+          const big = oRings.slice().sort((a, b) => b.length - a.length)[0];
+          const rcx = big.reduce((a, c) => a + c[0], 0) / big.length, rcy = big.reduce((a, c) => a + c[1], 0) / big.length;
+          if (!inVA(rcx, rcy)) return;
+          addPoi(tags, rcx, rcy, el.id, 'relation');
+          if (tags.building) oRings.forEach(o => {
+            const holes = iRings.filter(r => pip(r[0][0], r[0][1], o));
+            layers.buildings.push({ type: 'Feature', properties: { ...tags, osm_id: el.id, osm_type: 'relation' }, geometry: { type: 'Polygon', coordinates: [o, ...holes] } });
+          });
+          return;
+        }
+
+        if (el.type === 'node' && el.lat && el.lon) {
+          if (!inVA(el.lon, el.lat)) return;
+          addPoi(tags, el.lon, el.lat, el.id, 'node');
+          return;
+        }
+
+        if (!el.geometry || el.geometry.length < 2) return;
+
+        let coords = el.geometry.map(p => [p.lon, p.lat]);
+        if (VA_RINGS.length) {
+          const areaTag = tags.building || tags.leisure === 'garden' || (tags.landuse && /grass|forest|meadow/.test(tags.landuse));
+          if (areaTag) {
+            const cx = coords.reduce((a, c) => a + c[0], 0) / coords.length, cy = coords.reduce((a, c) => a + c[1], 0) / coords.length;
+            if (!inVA(cx, cy)) return;
+          } else {
+            const runs = []; let run = [];
+            coords.forEach(c => { if (inVA(c[0], c[1])) run.push(c); else { if (run.length > 1) runs.push(run); run = []; } });
+            if (run.length > 1) runs.push(run);
+            if (!runs.length) return;
+            coords = runs.sort((a, b) => b.length - a.length)[0];
+          }
+        }
+        if (coords.length > 3 && (tags.tourism || tags.amenity || tags.historic) &&
+            coords[0][0] === coords[coords.length - 1][0] && coords[0][1] === coords[coords.length - 1][1]) {
+          addPoi(tags, coords.reduce((a, c) => a + c[0], 0) / coords.length, coords.reduce((a, c) => a + c[1], 0) / coords.length, el.id, 'way');
+        }
+        const isArea = tags.building || tags.leisure === 'garden' ||
+                       (tags.landuse && /grass|forest|meadow/.test(tags.landuse));
+
+        if (isArea && coords.length > 2) {
+          if (coords[0][0] !== coords[coords.length - 1][0] ||
+              coords[0][1] !== coords[coords.length - 1][1]) {
+            coords.push([...coords[0]]);
+          }
+          feature = {
+            type: 'Feature',
+            properties: { ...tags, osm_id: el.id, osm_type: el.type },
+            geometry: { type: 'Polygon', coordinates: [coords] }
+          };
+        } else {
+          feature = {
+            type: 'Feature',
+            properties: { ...tags, osm_id: el.id, osm_type: el.type },
+            geometry: { type: 'LineString', coordinates: coords }
+          };
+        }
+
+        if (tags.building) {
+          layers.buildings.push(feature);
+        } else if (tags.highway) {
+          if (tags.highway === 'footway' || tags.highway === 'pedestrian' || tags.highway === 'path') {
+            layers.footpaths.push(feature);
+          } else {
+            layers.highways.push(feature);
+          }
+        } else if (tags.railway) {
+          layers.railways.push(feature);
+        } else if (tags.leisure === 'garden' || (tags.landuse && /grass|forest|meadow/.test(tags.landuse))) {
+          layers.green.push(feature);
+        }
+      });
+
+      const seen = new Set();
+      layers.buildings = layers.buildings.filter(f => {
+        const id = (f.properties.osm_type || 'x') + f.properties.osm_id;
+        if (seen.has(id)) return false;
+        seen.add(id);
+        return true;
+      });
+
+      layers.pois = dedupePois(layers.pois);
+      return layers;
+    }
+
+    // ================================================================
+    // 4. ADD DATA LAYERS TO MAP
+    // ================================================================
+    function circlePoly(lon, lat, r, n = 56) {
+      const pts = [];
+      for (let i = 0; i < n; i++) { const a = 2 * Math.PI * i / n; pts.push([lon + r * Math.cos(a) / (111320 * Math.cos(lat * Math.PI / 180)), lat + r * Math.sin(a) / 110540]); }
+      pts.push(pts[0]); return [pts];
+    }
+    function buildDomeFeatures(hasBas) {
+      const F = [], la = DOME.lat * Math.PI / 180, th = 84 * Math.PI / 180;   // basilica axis: facade faces bearing ~84°
+      const ll = (u, v) => [DOME.lon + (u * Math.sin(th) + v * Math.cos(th)) / (111320 * Math.cos(la)), DOME.lat + (u * Math.cos(th) - v * Math.sin(th)) / 110540];
+      const poly = (pts, b, h, c) => { const r = pts.map(q => ll(q[0], q[1])); r.push(r[0]); F.push({ type: 'Feature', properties: { b, h, c }, geometry: { type: 'Polygon', coordinates: [r] } }); };
+      const rect = (u0, u1, v0, v1, b, h, c) => poly([[u0, v0], [u1, v0], [u1, v1], [u0, v1]], b, h, c);
+      const circ = (cu, cv, r, b, h, c) => { const q = []; for (let i = 0; i < 40; i++) { const a = 2 * Math.PI * i / 40; q.push([cu + r * Math.cos(a), cv + r * Math.sin(a)]); } poly(q, b, h, c); };
+      const stone = '#d8cfb8', lead = '#aeb4bb';
+      if (!hasBas) {   // OSM has no usable basilica outline → stylised Latin-cross body
+        rect(24, 118, -34, 34, 0, 44, stone); rect(24, 118, -46, -34, 0, 30, '#cfc5ab'); rect(24, 118, 34, 46, 0, 30, '#cfc5ab');
+        rect(118, 136, -58, 58, 0, 48, '#e3dac3'); rect(-28, 28, -74, 74, 0, 44, stone); rect(-50, -28, -34, 34, 0, 40, stone);
+        const ap = []; for (let i = 0; i <= 20; i++) { const a = Math.PI / 2 + Math.PI * i / 20; ap.push([-50 + 34 * Math.cos(a), 34 * Math.sin(a)]); }
+        poly(ap, 0, 40, stone);
+        [[-40, -40], [-40, 40], [40, -40], [40, 40]].forEach(q => circ(q[0], q[1], 6.5, 44, 56, lead));
+      }
+      circ(0, 0, 22, 44, 63, '#d9cdb2');
+      const N = 14, H = 50;
+      for (let i = 0; i < N; i++) { const t = (i + 0.5) / N; circ(0, 0, 21 * Math.sqrt(1 - t * t) + 0.6, 63 + i * H / N, 63 + (i + 1) * H / N, i % 2 ? lead : '#b9bec5'); }
+      circ(0, 0, 4.4, 108, 124, '#e3d9bf'); circ(0, 0, 2.2, 124, 136.6, '#c9a959');
+      return F;
+    }
+
+    function addDataLayers() {
+      ['dome-3d-layer', 'railways-hatch', 'mask-layer', 'limes-layer'].forEach(id => { if (map.getLayer(id)) map.removeLayer(id); });
+      ['dome-source', 'limes-source', 'mask-source'].forEach(id => { if (map.getSource(id)) map.removeSource(id); });
+      if (VA_RINGS.length) {
+        const dark = document.body.classList.contains('high-contrast');
+        map.addSource('mask-source', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'Polygon', coordinates: [[[-180, -85], [180, -85], [180, 85], [-180, 85], [-180, -85]], ...VA_RINGS] } } });
+        map.addLayer({ id: 'mask-layer', type: 'fill', source: 'mask-source', paint: { 'fill-color': dark ? '#0d1117' : '#f4efe3', 'fill-opacity': 0.62 } });
+      }
+      ['buildings', 'highways', 'footpaths', 'green', 'pois'].forEach(layer => {
+        if (map.getLayer(layer + '-layer')) map.removeLayer(layer + '-layer');
+        if (map.getSource(layer + '-source')) map.removeSource(layer + '-source');
+        if (layer === 'buildings' && map.getLayer('buildings-3d-layer')) {
+          map.removeLayer('buildings-3d-layer');
+        }
+      });
+
+      if (!featuresByLayer) return;
+
+      const buildingFeatures = featuresByLayer.buildings || [];
+      if (buildingFeatures.length > 0) {
+        buildingFeatures.forEach(f => { f.properties.h = buildingHeight(f); });
+        const buildingGeoJSON = { type: 'FeatureCollection', features: buildingFeatures };
+        map.addSource('buildings-source', { type: 'geojson', data: buildingGeoJSON });
+
+        map.addLayer({
+          id: 'buildings-layer',
+          type: 'fill',
+          source: 'buildings-source',
+          paint: {
+            'fill-color': '#b8a88a',
+            'fill-opacity': 0.7,
+            'fill-outline-color': '#8a7a5a'
+          },
+          layout: { visibility: 'visible' }
+        });
+
+        map.addLayer({
+          id: 'buildings-3d-layer',
+          type: 'fill-extrusion',
+          source: 'buildings-source',
+          paint: {
+            'fill-extrusion-color': ['interpolate', ['linear'], ['get', 'h'], 0, '#e3d9bf', 12, '#cdbb92', 30, '#a98f62', 70, '#7d6238'],
+            'fill-extrusion-height': ['get', 'h'],
+            'fill-extrusion-base': 0,
+            'fill-extrusion-opacity': 0.92
+          },
+          layout: { visibility: 'none' }
+        });
+      }
+
+      addLineLayer('highways', '#c86a5a', 2.5);
+      addLineLayer('footpaths', '#8a9a7a', 1.5, [1, 1.5]);
+      addLineLayer('railways', '#6b7280', 3.2);
+      if (map.getSource('railways-source')) map.addLayer({ id: 'railways-hatch', type: 'line', source: 'railways-source',
+        paint: { 'line-color': '#ffffff', 'line-width': 1.6, 'line-dasharray': [2, 2.5] }, layout: { visibility: 'visible' } });
+      addFillLayer('green', '#7a9a6a', 0.45, '#5a7a4a');
+      addPoiLayer();
+
+      map.addSource('dome-source', { type: 'geojson', data: { type: 'FeatureCollection', features: buildDomeFeatures((featuresByLayer.buildings || []).some(f => f.properties.bas)) } });
+      map.addLayer({ id: 'dome-3d-layer', type: 'fill-extrusion', source: 'dome-source',
+        paint: { 'fill-extrusion-color': ['get', 'c'], 'fill-extrusion-height': ['get', 'h'], 'fill-extrusion-base': ['get', 'b'], 'fill-extrusion-opacity': 0.96 },
+        layout: { visibility: 'none' } });
+      if (VA_RINGS.length) {
+        map.addSource('limes-source', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'MultiLineString', coordinates: VA_RINGS } } });
+        map.addLayer({ id: 'limes-layer', type: 'line', source: 'limes-source', paint: { 'line-color': '#b08a2e', 'line-width': 2, 'line-dasharray': [3, 2] } });
+      }
+
+      if (is3DActive) toggle3D(true);
+
+      $$('[data-layer-toggle]').forEach(input => {
+        setLayerVisibility(input.dataset.layerToggle, input.checked);
+      });
+    }
+
+    function addLineLayer(name, color, width, dashArray) {
+      const features = featuresByLayer[name] || [];
+      if (features.length === 0) return;
+      map.addSource(name + '-source', { type: 'geojson', data: { type: 'FeatureCollection', features } });
+      const paint = { 'line-color': color, 'line-width': width, 'line-opacity': 0.85 };
+      if (dashArray) paint['line-dasharray'] = dashArray;
+      map.addLayer({
+        id: name + '-layer', type: 'line', source: name + '-source',
+        paint, layout: { 'line-cap': 'round', 'line-join': 'round', visibility: 'visible' }
+      });
+    }
+
+    function addFillLayer(name, color, opacity, outlineColor) {
+      const features = featuresByLayer[name] || [];
+      if (features.length === 0) return;
+      map.addSource(name + '-source', { type: 'geojson', data: { type: 'FeatureCollection', features } });
+      map.addLayer({
+        id: name + '-layer', type: 'fill', source: name + '-source',
+        paint: { 'fill-color': color, 'fill-opacity': opacity, 'fill-outline-color': outlineColor || color },
+        layout: { visibility: 'visible' }
+      });
+    }
+
+    function styleFont() {
+      try {
+        const l = map.getStyle().layers.find(x => x.type === 'symbol' && x.layout && x.layout['text-font']);
+        let f = l && l.layout['text-font'];
+        if (Array.isArray(f) && f[0] === 'literal') f = f[1];
+        if (Array.isArray(f) && f.length && typeof f[0] === 'string') return f;
+      } catch (e) {}
+      return ['Noto Sans Regular'];
+    }
+    function addPoiLayer() {
+      const features = featuresByLayer.pois || [];
+      if (features.length === 0) return;
+      Object.entries(POI_ICON_SPEC).forEach(([id, sp]) => {
+        if (!map.hasImage(id)) map.addImage(id, makePoiIcon(sp.icon, sp.color), { pixelRatio: 2 });
+      });
+      map.addSource('pois-source', { type: 'geojson', data: { type: 'FeatureCollection', features } });
+      map.addLayer({
+        id: 'pois-layer', type: 'symbol', source: 'pois-source',
+        layout: { 'icon-image': ['get', 'poi_icon'], 'icon-size': POI_SIZE, 'icon-allow-overlap': false, 'icon-padding': 4,
+          'symbol-sort-key': ['-', 10, ['to-number', ['get', 'rank'], 0]],
+          'text-field': poiLabelExpr(), 'text-font': styleFont(), 'text-size': 11, 'text-anchor': 'top', 'text-offset': [0, 1.25],
+          'text-optional': true, 'text-max-width': 7, visibility: 'visible' },
+        paint: { 'text-color': '#2a2a2a', 'text-halo-color': '#fffdf6', 'text-halo-width': 1.4 }
+      });
+      applyPoiFilter();
+    }
+
+    function setLayerVisibility(layerName, visible) {
+      const layerId = layerName + '-layer';
+      if (map.getLayer(layerId)) {
+        map.setLayoutProperty(layerId, 'visibility', visible ? 'visible' : 'none');
+      }
+      if (layerName === 'railways' && map.getLayer('railways-hatch')) map.setLayoutProperty('railways-hatch', 'visibility', visible ? 'visible' : 'none');
+      if (layerName === 'buildings' && map.getLayer('buildings-3d-layer')) {
+        map.setLayoutProperty('buildings-3d-layer', 'visibility',
+          (visible && is3DActive) ? 'visible' : 'none');
+        if (map.getLayer('dome-3d-layer')) map.setLayoutProperty('dome-3d-layer', 'visibility', (visible && is3DActive) ? 'visible' : 'none');
+        if (is3DActive && map.getLayer('buildings-layer')) map.setLayoutProperty('buildings-layer', 'visibility', 'none');
+      }
+    }
+
+    // ================================================================
+    // 5. METRICS — Refined, viewport-reactive, interesting
+    // ================================================================
+    function updateMetrics() {
+      if (!featuresByLayer) return;
+
+      const bounds = map.getBounds();
+      const viewportArea = computeViewportArea(bounds);
+      const viewportHectares = viewportArea / 10000;
+
+      const inViewport = (feature) => {
+        const coords = getAllCoords(feature.geometry);
+        return coords.some(c => bounds.contains([c[0], c[1]]));
+      };
+
+      // ---- Roads ----
+      const roads = (featuresByLayer.highways || []).filter(inViewport);
+      const roadLength = sumLineLength(roads);
+      $('#metric-roads').textContent = formatLength(roadLength);
+
+      // Longest named road in view
+      let longestRoad = null, longestRoadLen = 0;
+      roads.forEach(f => {
+        const len = sumLineLength([f]);
+        if (len > longestRoadLen) { longestRoadLen = len; longestRoad = f; }
+      });
+      if (longestRoad) {
+        const nm = longestRoad.properties.name
+                || longestRoad.properties['name:la']
+                || longestRoad.properties.ref
+                || T('Via sine nomine');
+        $('#interesting-longest-road').textContent = nm + ' · ' + formatLength(longestRoadLen);
+      } else {
+        $('#interesting-longest-road').textContent = '—';
+      }
+
+      // ---- Footpaths ----
+      const foots = (featuresByLayer.footpaths || []).filter(inViewport);
+      const footLength = sumLineLength(foots);
+      $('#metric-footpaths').textContent = formatLength(footLength);
+      const rails = (featuresByLayer.railways || []).filter(inViewport);
+      const railLength = sumLineLength(rails);
+      $('#metric-railways').textContent = formatLength(railLength);
+
+      // Proportional bars
+      const maxLen = Math.max(roadLength, footLength, railLength, 1);
+      $('#bar-roads').style.width = (roadLength / maxLen * 100) + '%';
+      $('#bar-footpaths').style.width = (footLength / maxLen * 100) + '%';
+      $('#bar-railways').style.width = (railLength / maxLen * 100) + '%';
+
+      // ---- Buildings ----
+      const buildings = (featuresByLayer.buildings || []).filter(inViewport);
+      const buildingCount = buildings.length;
+      const buildingArea = buildings.reduce((s, f) => s + computePolygonArea(f.geometry), 0);
+      $('#metric-building-count').textContent = formatNumber(buildingCount);
+      $('#metric-building-area').textContent = formatArea(buildingArea);
+
+      // Density (per hectare)
+      const density = viewportHectares > 0 ? buildingCount / viewportHectares : 0;
+      $('#metric-density').innerHTML = density.toFixed(1) + ' <small>/ha</small>';
+
+      // Tallest building in view
+      let tallest = null, tallestHeight = 0;
+      buildings.forEach(f => {
+        const lv = parseFloat(f.properties['building:levels']);
+        if (!isNaN(lv) && lv > 0) {
+          const h = lv * 3.5;
+          if (h > tallestHeight) { tallestHeight = h; tallest = f; }
+        }
+      });
+      if (tallest) {
+        const nm = tallest.properties.name
+                || tallest.properties['name:la']
+                || tallest.properties.building
+                || 'Aedificium';
+        $('#interesting-tallest').textContent = nm + ' · ' + tallestHeight.toFixed(0) + ' m';
+      } else {
+        $('#interesting-tallest').textContent = '—';
+      }
+
+      // Average height
+      const heights = buildings
+        .map(f => parseFloat(f.properties['building:levels']))
+        .filter(h => !isNaN(h) && h > 0);
+      const avgHeight = heights.length > 0
+        ? (heights.reduce((a, b) => a + b, 0) / heights.length) * 3.5 : 0;
+      $('#metric-avg-height').innerHTML = avgHeight.toFixed(1) + ' <small>m</small>';
+
+      // ---- Green ----
+      const greenFeatures = (featuresByLayer.green || []).filter(inViewport);
+      const greenArea = greenFeatures.reduce((s, f) => s + computePolygonArea(f.geometry), 0);
+      const greenPct = viewportArea > 0 ? (greenArea / viewportArea) * 100 : 0;
+      $('#metric-green-pct').textContent = greenPct.toFixed(1) + '%';
+      const deg = Math.min(greenPct, 100) / 100 * 360;
+      $('#green-ring').style.background =
+        `conic-gradient(var(--green-accent) 0deg, var(--green-accent) ${deg}deg, var(--track) ${deg}deg)`;
+
+      // ---- Data quality ----
+      const buildingsWithLevels = buildings.filter(f =>
+        f.properties['building:levels'] !== undefined &&
+        f.properties['building:levels'] !== ''
+      ).length;
+      const qualityPct = buildingCount > 0 ? (buildingsWithLevels / buildingCount) * 100 : 0;
+      $('#gauge-percent').textContent = Math.round(qualityPct) + '%';
+      $('#gauge-fill').style.width = qualityPct + '%';
+
+      // ---- Legend counts ----
+      $('#count-buildings').textContent = formatNumber(buildingCount);
+      $('#count-highways').textContent = formatNumber(roads.length);
+      $('#count-footpaths').textContent = formatNumber(foots.length);
+      $('#count-railways').textContent = formatNumber(rails.length);
+      $('#count-green').textContent = formatNumber(greenFeatures.length);
+
+      // ---- POIs ----
+      const pois = (featuresByLayer.pois || []).filter(inViewport);
+      $('#count-pois').textContent = formatNumber(pois.length);
+      $('#metric-poi-count').textContent = formatNumber(pois.length);
+
+      updatePOIChart(pois);
+
+      metrics = { roadLength, footLength, railLength, buildingCount,
+                  buildingArea, greenPct, qualityPct, poiCount: pois.length };
+    }
+
+    function formatNumber(n) {
+      return Math.round(n).toLocaleString('de-DE');
+    }
+
+    function computeViewportArea(bounds) {
+      const sw = bounds.getSouthWest();
+      const ne = bounds.getNorthEast();
+      const latDiff = ne.lat - sw.lat;
+      const lngDiff = ne.lng - sw.lng;
+      const avgLat = (sw.lat + ne.lat) / 2;
+      const mPerDegLat = 111320;
+      const mPerDegLng = 111320 * Math.cos(avgLat * Math.PI / 180);
+      return Math.abs(latDiff * mPerDegLat * lngDiff * mPerDegLng);
+    }
+
+    function getAllCoords(geometry) {
+      if (!geometry) return [];
+      if (geometry.type === 'Point') return [geometry.coordinates];
+      if (geometry.type === 'LineString') return geometry.coordinates;
+      if (geometry.type === 'Polygon') return geometry.coordinates[0] || [];
+      if (geometry.type === 'MultiPolygon') return geometry.coordinates.flat(2);
+      return [];
+    }
+
+    function sumLineLength(features) {
+      let total = 0;
+      features.forEach(f => {
+        const coords = getAllCoords(f.geometry);
+        for (let i = 1; i < coords.length; i++) {
+          total += haversine(coords[i - 1], coords[i]);
+        }
+      });
+      return total;
+    }
+
+    function haversine(a, b) {
+      const R = 6371000;
+      const lat1 = a[1] * Math.PI / 180;
+      const lat2 = b[1] * Math.PI / 180;
+      const dLat = (b[1] - a[1]) * Math.PI / 180;
+      const dLon = (b[0] - a[0]) * Math.PI / 180;
+      const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+      return 2 * R * Math.asin(Math.sqrt(h));
+    }
+
+    function computePolygonArea(geometry) {
+      if (!geometry) return 0;
+      let rings = [];
+      if (geometry.type === 'Polygon') rings = geometry.coordinates;
+      else if (geometry.type === 'MultiPolygon') rings = geometry.coordinates.flat();
+      else return 0;
+
+      let totalArea = 0;
+      rings.forEach(ring => {
+        if (ring.length < 3) return;
+        const lat0 = ring[0][1] * Math.PI / 180;
+        const R = 6371000;
+        let area = 0;
+        for (let i = 0; i < ring.length; i++) {
+          const j = (i + 1) % ring.length;
+          const x1 = ring[i][0] * Math.PI / 180 * R * Math.cos(lat0);
+          const y1 = ring[i][1] * Math.PI / 180 * R;
+          const x2 = ring[j][0] * Math.PI / 180 * R * Math.cos(lat0);
+          const y2 = ring[j][1] * Math.PI / 180 * R;
+          area += x1 * y2 - x2 * y1;
+        }
+        totalArea += Math.abs(area) / 2;
+      });
+      return totalArea;
+    }
+
+    function formatLength(meters) {
+      if (meters >= 1000) return (meters / 1000).toFixed(2) + ' km';
+      return Math.round(meters) + ' m';
+    }
+
+    function formatArea(m2) {
+      if (m2 >= 10000) return (m2 / 10000).toFixed(2) + ' ha';
+      return formatNumber(m2) + ' m²';
+    }
+
+    function updateFooterCoords() {
+      const c = map.getCenter();
+      $('#footer-coords').textContent =
+        `${Math.abs(c.lat).toFixed(4)}° ${c.lat >= 0 ? 'N' : 'S'}, ${Math.abs(c.lng).toFixed(4)}° ${c.lng >= 0 ? 'E' : 'W'}`;
+    }
+
+    // ================================================================
+    // 6. POI DONUT CHART
+    // ================================================================
+    function updatePOIChart(pois) {
+      const categories = {};
+      pois.forEach(f => {
+        const p = f.properties;
+        const cat = p.poi_cat || 'Aliud';
+        categories[cat] = (categories[cat] || 0) + 1;
+      });
+
+      const labels = Object.keys(categories);
+      const data = Object.values(categories);
+      const ctx = document.getElementById('pois-chart').getContext('2d');
+
+      if (poisChart) {
+        poisChart.data.labels = labels.map(T);
+        poisChart.data.datasets[0].data = data;
+        poisChart.data.datasets[0].backgroundColor = labels.map(poiColor);
+        poisChart.update();
+        return;
+      }
+
+      poisChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          labels: labels.map(T),
+          datasets: [{
+            data: data,
+            backgroundColor: labels.map(poiColor),
+            borderColor: '#f7f4ef',
+            borderWidth: 0,
+            borderRadius: 0
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          cutout: '62%',
+          plugins: {
+            legend: {
+              display: true,
+              position: 'bottom',
+              labels: {
+                font: { family: "'Inter', sans-serif", size: 9 },
+                boxWidth: 10, boxHeight: 10, padding: 6, color: '#3a3a3a'
+              }
+            },
+            tooltip: {
+              backgroundColor: '#1a2a4a',
+              titleFont: { family: "'Cinzel', serif", size: 10 },
+              bodyFont: { family: "'Inter', sans-serif", size: 10 },
+              cornerRadius: 0
+            }
+          }
+        }
+      });
+    }
+
+    // ================================================================
+    // 6b. ORBIT AROUND MICHELANGELO'S DOME
+    // ================================================================
+    function stopOrbit() {
+      orbitOn = false; if (orbitRaf) cancelAnimationFrame(orbitRaf); orbitRaf = null;
+      const b = $('#btn-orbit'); if (b) { b.classList.remove('active'); b.setAttribute('aria-pressed', 'false'); }
+    }
+    function toggleOrbit() {
+      if (orbitOn) { stopOrbit(); return; }
+      if (!is3DActive) toggle3D(true);
+      orbitOn = true;
+      $('#btn-orbit').classList.add('active'); $('#btn-orbit').setAttribute('aria-pressed', 'true');
+      map.flyTo({ center: [DOME.lon, DOME.lat], zoom: 17.4, pitch: 64, duration: 2200, essential: true });
+      map.once('moveend', () => {
+        const step = () => { if (!orbitOn) return; map.setBearing((map.getBearing() + 0.16) % 360); orbitRaf = requestAnimationFrame(step); };
+        if (orbitOn) orbitRaf = requestAnimationFrame(step);
+      });
+    }
+
+    // ================================================================
+    // 7. 3D EXTRUSION
+    // ================================================================
+    function toggle3D(forceState) {
+      if (!featuresByLayer || !featuresByLayer.buildings || featuresByLayer.buildings.length === 0) {
+        console.warn('No building data for 3D extrusion');
+        return;
+      }
+      is3DActive = (forceState !== undefined) ? forceState : !is3DActive;
+
+      const bOn = $('[data-layer-toggle="buildings"]').checked;
+      if (map.getLayer('buildings-3d-layer')) {
+        map.setLayoutProperty('buildings-3d-layer', 'visibility', (is3DActive && bOn) ? 'visible' : 'none');
+      }
+      if (map.getLayer('dome-3d-layer')) map.setLayoutProperty('dome-3d-layer', 'visibility', (is3DActive && bOn) ? 'visible' : 'none');
+      if (map.getLayer('buildings-layer')) {
+        map.setLayoutProperty('buildings-layer', 'visibility', (!is3DActive && bOn) ? 'visible' : 'none');
+      }
+      try { if (is3DActive) map.setLight({ anchor: 'viewport', color: '#fff4dc', intensity: 0.4, position: [1.2, 210, 40] }); } catch (e) {}
+
+      if (is3DActive) map.easeTo({ pitch: 62, bearing: -20, zoom: Math.max(map.getZoom(), 16.8), duration: 1000 });
+      else map.easeTo({ pitch: 0, bearing: 0, duration: 800 });
+
+      const btn = $('#btn-3d');
+      btn.classList.toggle('active', is3DActive);
+      btn.setAttribute('aria-pressed', is3DActive);
+      $('#btn-orbit').hidden = !is3DActive;
+      if (!is3DActive) stopOrbit();
+    }
+
+    // ================================================================
+    // 8. POPUP MINI-DASHBOARDS
+    // ================================================================
+    function handleMapClick(e) {
+      if (!featuresByLayer) return;
+
+      const features = map.queryRenderedFeatures(e.point, {
+        layers: ['buildings-layer', 'buildings-3d-layer', 'pois-layer'].filter(id => map.getLayer(id))
+      });
+
+      if (features.length === 0) return;
+      const f = features[0];
+      const props = f.properties;
+      const geomType = f.geometry.type;
+
+      let html = '';
+
+      if (geomType === 'Polygon' || geomType === 'MultiPolygon' || f.layer.id.includes('buildings')) {
+        const name = props.name || T('Aedificium sine nomine');
+        const levels = props['building:levels'] || 'Nescio';
+        const buildingType = props.building || 'Aliud';
+        const height = props.h ? Math.round(props.h) + ' m' + ((props.height || levels !== 'Nescio') ? '' : ' ' + T('(aestimata)')) : T('Nescio');
+
+        const allHeights = (featuresByLayer.buildings || [])
+          .map(b => parseFloat(b.properties['building:levels']))
+          .filter(h => !isNaN(h) && h > 0);
+        const avgLevels = allHeights.length > 0
+          ? allHeights.reduce((a, b) => a + b, 0) / allHeights.length : 3;
+        const avgHeight = (avgLevels * 3.5).toFixed(1);
+
+        const uid = Date.now();
+
+        html = `
+          <div class="popup-title">${esc(name)}</div>
+          <div class="popup-stat"><span>Typus</span><span>${esc(buildingType)}</span></div>
+          <div class="popup-stat"><span>${T('Gradus')}</span><span>${esc(T(levels))}</span></div>
+          <div class="popup-stat"><span>${T('Altitudo')}</span><span>${height}</span></div>
+          <div class="popup-stat"><span>${T('Media Vaticana')}</span><span>${avgHeight} m</span></div>
+          <div class="popup-chart-container" style="height:70px;">
+            <canvas id="popup-bar-${uid}"></canvas>
+          </div>
+        `;
+
+        new maplibregl.Popup({ offset: 12, closeButton: true, maxWidth: '260px' })
+          .setLngLat(e.lngLat)
+          .setHTML(html)
+          .addTo(map);
+
+        setTimeout(() => {
+          const barCanvas = document.getElementById('popup-bar-' + uid);
+
+          if (barCanvas) {
+            const h = levels !== 'Nescio' ? parseFloat(levels) * 3.5 : 3.5 * 3.5;
+            new Chart(barCanvas.getContext('2d'), {
+              type: 'bar',
+              data: {
+                labels: [T('Hoc'), T('Media Vat.')],
+                datasets: [{
+                  data: [h, avgLevels * 3.5],
+                  backgroundColor: ['#c86a5a', '#b8a88a'],
+                  borderWidth: 0, borderRadius: 0
+                }]
+              },
+              options: {
+                responsive: true, maintainAspectRatio: false, indexAxis: 'y',
+                plugins: { legend: { display: false } },
+                scales: {
+                  x: { beginAtZero: true, ticks: { font: { size: 9 } } },
+                  y: { ticks: { font: { size: 9 } } }
+                }
+              }
+            });
+          }
+        }, 50);
+
+      } else if (f.layer.id.includes('pois')) {
+        const name = props.name || T('Punctum Interesse');
+        const kind = (props.historic || props.tourism || props.amenity || '').replace(/_/g, ' ');
+        const site = /^https?:\/\//i.test(props.website || props['contact:website'] || '') ? (props.website || props['contact:website']) : null;
+        const wp = (props.wikipedia || '').match(/^([a-z-]+):(.+)$/);
+        const rows = [
+          [T('Categoria'), T(props.poi_cat)], [T('Species'), T(props.poi_sub)], [T('Hora'), props.opening_hours],
+          [T('Telephonum'), props.phone || props['contact:phone']], [T('Annus'), props.start_date], [T('Descriptio'), props.description]
+        ].filter(r => r[1]).map(r => `<div class="popup-stat"><span>${r[0]}</span><span style="text-align:right;max-width:65%">${esc(r[1])}</span></div>`).join('');
+        const links = [
+          site && `<a href="${esc(site)}" target="_blank" rel="noopener">${T('Situs')}</a>`,
+          wp && `<a href="https://${wp[1]}.wikipedia.org/wiki/${encodeURIComponent(wp[2].replace(/ /g, '_'))}" target="_blank" rel="noopener">Wikipedia</a>`
+        ].filter(Boolean).join(' · ');
+        html = `
+          <div class="popup-title">${esc(name)}</div>
+          ${rows}
+          ${links ? `<div class="popup-links">${links}</div>` : ''}
+        `;
+        new maplibregl.Popup({ offset: 12, closeButton: true, maxWidth: '220px' })
+          .setLngLat(e.lngLat)
+          .setHTML(html)
+          .addTo(map);
+      }
+    }
+
+    // ================================================================
+    // 9. NARRATIVE MODE
+    // ================================================================
+    const NARRATIVE_STOPS = [
+      {
+        center: [12.4539, 41.9022], zoom: 17.2, pitch: 45, bearing: 0,
+        title: 'Basilica Sancti Petri',
+        text: 'Basilica Sancti Petri, centrum fidei Catholicae, in corde Civitatis Vaticanae sita est. Aedificata est super sepulcrum Sancti Petri Apostoli. Architectura eius, a Bramante, Michelangelo, et Bernini designata, fastigium Christianum totius orbis terrarum repraesentat.'
+      },
+      {
+        center: [12.4545, 41.9029], zoom: 17.8, pitch: 40, bearing: 10,
+        title: 'Sacellum Sixtinum',
+        text: 'Sacellum Sixtinum, a Papa Sixto IV anno 1483 consecratum, celeberrimum est propter tectoria a Michelangelo picta. Hic conclavia Papae eliguntur. Tectum "Creatio Adam" inter opera artis Christianae maximi momenti numeratur.'
+      },
+      {
+        center: [12.4505, 41.9045], zoom: 16.8, pitch: 30, bearing: -20,
+        title: 'Horti Vaticani',
+        text: 'Horti Vaticani, dimidia fere parte Civitatis Vaticanae constans, paradisus tranquillitatis est. Fontes, statuae, et plantae ex toto orbe terrarum collectae hortos ornant. Hic Papa deambulare solet.'
+      },
+      {
+        center: [12.4525, 41.9032], zoom: 17.5, pitch: 35, bearing: 5,
+        title: 'Palatium Gubernatoratus',
+        text: 'Palatium Gubernatoratus sedes est Gubernatoratus Civitatis Vaticanae, qui administrationem cotidianam civitatis curat. Aedificium, iuxta Basilicam situm, munera gubernationis et iustitiae exercet.'
+      }
+    ];
+
+    function startNarrative() {
+      isNarrativeActive = true;
+      narrativeIndex = 0;
+      $('#narrative-panel').classList.add('visible');
+      $('#btn-narrative').classList.add('active');
+      $('#btn-narrative').setAttribute('aria-pressed', 'true');
+      flyToStop(0);
+    }
+
+    function stopNarrative() {
+      isNarrativeActive = false;
+      $('#narrative-panel').classList.remove('visible');
+      $('#btn-narrative').classList.remove('active');
+      $('#btn-narrative').setAttribute('aria-pressed', 'false');
+    }
+
+    function flyToStop(index) {
+      if (index < 0 || index >= NARRATIVE_STOPS.length) return;
+      narrativeIndex = index;
+      const stop = NARRATIVE_STOPS[index];
+
+      map.flyTo({
+        center: stop.center, zoom: stop.zoom,
+        pitch: stop.pitch, bearing: stop.bearing,
+        duration: 2500, essential: true
+      });
+
+      renderNarrativeText();
+      $('#narrative-prev').disabled = index === 0;
+      $('#narrative-next').disabled = index === NARRATIVE_STOPS.length - 1;
+    }
+
+    // ================================================================
+    // 10. HIGH-CONTRAST MODE
+    // ================================================================
+    function toggleContrast() {
+      isHighContrast = !isHighContrast;
+      document.body.classList.toggle('high-contrast', isHighContrast);
+      const btn = $('#btn-contrast');
+      btn.classList.toggle('active', isHighContrast);
+      btn.setAttribute('aria-pressed', isHighContrast);
+
+      currentStyle = isHighContrast ? STYLE_DARK : STYLE_LIGHT;
+      map.setStyle(currentStyle);
+      map.once('style.load', () => addDataLayers());
+    }
+
+    // ================================================================
+    // 11. EVENT LISTENERS
+    // ================================================================
+    function bindEvents() {
+      $('#btn-3d').addEventListener('click', () => toggle3D());
+      $('#btn-orbit').addEventListener('click', toggleOrbit);
+      $('#btn-update').addEventListener('click', () => { hideError(); fetchOverpassData(true); });
+      $('#btn-home').addEventListener('click', fitState);
+      $('#btn-lang').addEventListener('click', () => setLang(LANG === 'en' ? 'la' : 'en'));
+
+      $('#btn-narrative').addEventListener('click', () => {
+        if (isNarrativeActive) stopNarrative();
+        else startNarrative();
+      });
+      $('#close-narrative').addEventListener('click', stopNarrative);
+      $('#narrative-prev').addEventListener('click', () => flyToStop(narrativeIndex - 1));
+      $('#narrative-next').addEventListener('click', () => flyToStop(narrativeIndex + 1));
+
+      $('#btn-contrast').addEventListener('click', toggleContrast);
+
+      $('#btn-retry').addEventListener('click', () => {
+        hideError();
+        fetchOverpassData();
+      });
+
+      Object.values(POI_CATS).forEach(c => {
+        const b = document.createElement('button');
+        b.className = 'poi-chip'; b.setAttribute('aria-pressed', 'true');
+        b.innerHTML = `<i style="background:${c.color}"></i>${c.label}`;
+        b.addEventListener('click', () => {
+          const on = b.getAttribute('aria-pressed') !== 'true';
+          b.setAttribute('aria-pressed', on);
+          if (on) poiCatOff.delete(c.label); else poiCatOff.add(c.label);
+          applyPoiFilter();
+        });
+        $('#poi-chips').appendChild(b);
+      });
+
+      $('#legend-header').addEventListener('click', () => {
+        $('#legend').classList.toggle('collapsed');
+      });
+
+      $$('[data-layer-toggle]').forEach(input => {
+        input.addEventListener('change', (e) => {
+          if (e.target.dataset.layerToggle === 'pois') $('#poi-chips').hidden = !e.target.checked;
+          setLayerVisibility(e.target.dataset.layerToggle, e.target.checked);
+        });
+      });
+
+      // Legend row hover highlight
+      $$('.legend-row').forEach(row => {
+        const layerName = row.dataset.layer;
+        row.addEventListener('mouseenter', () => {
+          if (layerName === 'buildings') map.setPaintProperty('buildings-layer', 'fill-color', '#c9a959');
+          else if (layerName === 'highways') {
+            map.setPaintProperty('highways-layer', 'line-color', '#e88a7a');
+            map.setPaintProperty('highways-layer', 'line-width', 4);
+          } else if (layerName === 'footpaths') {
+            map.setPaintProperty('footpaths-layer', 'line-color', '#aaba9a');
+            map.setPaintProperty('footpaths-layer', 'line-width', 3);
+          } else if (layerName === 'green') {
+            map.setPaintProperty('green-layer', 'fill-color', '#9aba8a');
+          } else if (layerName === 'pois') {
+            if (map.getLayer('pois-layer')) map.setLayoutProperty('pois-layer', 'icon-size', POI_SIZE_HI);
+          }
+        });
+        row.addEventListener('mouseleave', () => {
+          if (layerName === 'buildings') map.setPaintProperty('buildings-layer', 'fill-color', '#b8a88a');
+          else if (layerName === 'highways') {
+            map.setPaintProperty('highways-layer', 'line-color', '#c86a5a');
+            map.setPaintProperty('highways-layer', 'line-width', 2.5);
+          } else if (layerName === 'footpaths') {
+            map.setPaintProperty('footpaths-layer', 'line-color', '#8a9a7a');
+            map.setPaintProperty('footpaths-layer', 'line-width', 1.5);
+          } else if (layerName === 'green') {
+            map.setPaintProperty('green-layer', 'fill-color', '#7a9a6a');
+          } else if (layerName === 'pois') {
+            if (map.getLayer('pois-layer')) map.setLayoutProperty('pois-layer', 'icon-size', POI_SIZE);
+          }
+        });
+      });
+
+      document.addEventListener('keydown', (e) => {
+        if (!isNarrativeActive) return;
+        if (e.key === 'Escape') stopNarrative();
+        else if (e.key === 'ArrowRight') flyToStop(narrativeIndex + 1);
+        else if (e.key === 'ArrowLeft') flyToStop(narrativeIndex - 1);
+      });
+    }
+
+    // ================================================================
+    // 12. BOOTSTRAP
+    // ================================================================
+    window.addEventListener('DOMContentLoaded', () => {
+      initMap();
+      bindEvents();
+
+      // Start rotating curiosum facts
+      rotateCuriosum();
+      setInterval(rotateCuriosum, 8000);
+    });
+
+  </script>
+</body>
+</html>
